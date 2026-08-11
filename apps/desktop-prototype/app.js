@@ -110,6 +110,8 @@ let selectedTripId = trips[0]?.id;
 let editingTripId = null;
 let map;
 let tileLayer;
+let baseGeoJsonLayer;
+let tilesWorking = false;
 let tileErrorCount = 0;
 let currentTileIndex = 0;
 let routeLayer;
@@ -120,21 +122,24 @@ let markerByTripId = new Map();
 const form = document.querySelector("#quickAddForm");
 const input = document.querySelector("#tripInput");
 const dateInput = document.querySelector("#tripDate");
-const tripList = document.querySelector("#tripList");
-const detail = document.querySelector("#tripDetail");
-const storedCount = document.querySelector("#storedCount");
-const totalDistance = document.querySelector("#totalDistance");
-const cityCount = document.querySelector("#cityCount");
-const flightCount = document.querySelector("#flightCount");
-const railCount = document.querySelector("#railCount");
-const fitAllButton = document.querySelector("#fitAllButton");
+const tripStrip = document.querySelector("#tripStrip");
+const heroOverlay = document.querySelector("#heroOverlay");
+const statsLine = document.querySelector("#statsLine");
 const mapFallback = document.querySelector("#mapFallback");
 const tileSourceLabel = document.querySelector("#tileSourceLabel");
 const exportButtons = document.querySelectorAll(".export-json");
 const importButtons = document.querySelectorAll(".import-json");
 const importFile = document.querySelector("#importFile");
 
-dateInput.value = new Date().toISOString().slice(0, 10);
+// 登记日期：只能选择今天及以后（12306 预售期限制），使用本地日期避免 UTC 时区偏差
+function localToday() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+dateInput.value = localToday();
+dateInput.min = localToday();
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -147,10 +152,7 @@ form.addEventListener("submit", (event) => {
   persistTrips();
   input.value = "";
   render();
-});
-
-fitAllButton.addEventListener("click", () => {
-  fitMapToVisibleTrips();
+  handleRailStationSelection(draft.id);
 });
 
 exportButtons.forEach((button) => button.addEventListener("click", () => {
@@ -195,6 +197,8 @@ function initMap(attempt = 0) {
   }
 
   mapFallback.hidden = false;
+  mapFallback.querySelector("span").textContent =
+    "Leaflet 本地资源加载失败，请强制刷新页面（Ctrl+F5）或确认 vendor/leaflet/ 目录完整。";
 }
 
 function loadLeafletFromCdn() {
@@ -230,7 +234,18 @@ function setupMap() {
     attributionControl: true
   }).setView([31.5, 120.8], 6);
 
-  applyTileLayer(0);
+  // 本地矢量底图放在瓦片层之下：在线瓦片可用时会被覆盖，离线时成为底图
+  const basePane = map.createPane("offlineBase");
+  basePane.style.zIndex = 150;
+
+  loadChinaBaseGeoJson();
+
+  // 调试入口：URL 带 #offline 时模拟完全离线，验证本地矢量底图
+  if (location.hash.includes("offline")) {
+    tileSourceLabel.textContent = "底图：离线矢量底图（本地内置·模拟）";
+  } else {
+    applyTileLayer(0);
+  }
 
   routeLayer = L.layerGroup().addTo(map);
   markerLayer = L.layerGroup().addTo(map);
@@ -238,6 +253,44 @@ function setupMap() {
   // 地图就绪后补上首次 render 时错过的路线绘制
   render();
   setTimeout(() => map.invalidateSize(), 0);
+}
+
+// 优先用 script 注入的全局数据（兼容 file:// 双击打开），其次 fetch 本地 geojson
+function loadChinaBaseGeoJson() {
+  const addLayer = (geojson) => {
+    if (!geojson || !map) return;
+    baseGeoJsonLayer = L.geoJSON(geojson, {
+      pane: "offlineBase",
+      style: () => offlineBaseStyle()
+    }).addTo(map);
+    // 若加入时在线瓦片已确认可用，切换为浅色描边样式
+    refreshBaseLayerStyle();
+  };
+
+  if (window.LEAVES_CHINA_GEOJSON) {
+    addLayer(window.LEAVES_CHINA_GEOJSON);
+    return;
+  }
+
+  fetch("./vendor/china-provinces.geojson")
+    .then((response) => {
+      if (!response.ok) throw new Error("geojson missing");
+      return response.json();
+    })
+    .then(addLayer)
+    .catch(() => {});
+}
+
+function offlineBaseStyle() {
+  return tilesWorking
+    ? { color: "#b6aa93", weight: 0.5, fill: false, opacity: 0.5 }
+    : { color: "#93a7a2", weight: 1, fillColor: "#e9e4d3", fillOpacity: 0.85 };
+}
+
+function refreshBaseLayerStyle() {
+  if (baseGeoJsonLayer) {
+    baseGeoJsonLayer.setStyle(offlineBaseStyle());
+  }
 }
 
 function applyTileLayer(index) {
@@ -255,15 +308,19 @@ function applyTileLayer(index) {
 
   tileLayer.on("tileload", () => {
     tileErrorCount = 0;
+    if (!tilesWorking) {
+      tilesWorking = true;
+      refreshBaseLayerStyle();
+    }
   });
 
   tileLayer.on("tileerror", () => {
     tileErrorCount += 1;
     if (tileErrorCount >= 6 && currentTileIndex < tileSources.length - 1) {
       applyTileLayer(currentTileIndex + 1);
-    } else if (tileErrorCount >= 12) {
-      // 所有在线瓦片源都不可用：进入离线示意模式，保留路线与点位
-      tileSourceLabel.textContent = "底图：离线示意模式（无瓦片）";
+    } else if (tileErrorCount >= 12 && tilesWorking === false) {
+      // 所有在线瓦片源不可用：显示本地矢量底图，保留路线与点位
+      tileSourceLabel.textContent = "底图：离线矢量底图（本地内置）";
     }
   });
 
@@ -309,8 +366,9 @@ function createTripDraft(rawText, date) {
 
 function detectMode(text) {
   const normalized = text.trim().toUpperCase();
-  if (/^[A-Z]{2}\d{3,4}$/.test(normalized)) return "flight";
-  if (/^[GDCZTK]\d{1,5}$/.test(normalized)) return "rail";
+  // 前缀匹配：支持 "CA1234 北京到上海"、"G7254 合肥南到上海" 这类带区间的车次输入
+  if (/^[A-Z]{2}\d{3,4}/.test(normalized)) return "flight";
+  if (/^[GDCZTK]\d{1,5}/.test(normalized)) return "rail";
   if (text.includes("打车") || text.includes("自驾") || text.includes("到") || text.includes("->")) return "road";
   return "road";
 }
@@ -337,7 +395,10 @@ function inferRoute(text, mode) {
 }
 
 function cleanPlace(value) {
-  return value.replace(/打车|自驾|公交|大巴/g, "").trim() || "待确认";
+  return value
+    .replace(/打车|自驾|公交|大巴/g, "")
+    .replace(/^[A-Z]{1,3}\d{1,5}/, "") // 去掉残留在起点里的车次号（如 "G7254 合肥南" → "合肥南"）
+    .trim() || "待确认";
 }
 
 function normalizePlace(value) {
@@ -384,9 +445,9 @@ function render() {
     selectedTripId = visibleTrips[0]?.id || trips[0]?.id;
   }
 
-  renderTripList(visibleTrips);
+  renderTripStrip(visibleTrips);
   renderMap(visibleTrips);
-  renderDetail();
+  renderHero();
   renderStats();
 }
 
@@ -394,8 +455,16 @@ function getVisibleTrips() {
   return trips.filter((trip) => activeFilter === "all" || trip.mode === activeFilter);
 }
 
-function renderTripList(visibleTrips) {
-  tripList.innerHTML = "";
+function renderTripStrip(visibleTrips) {
+  tripStrip.innerHTML = "";
+
+  if (!visibleTrips.length) {
+    const empty = document.createElement("p");
+    empty.className = "trip-meta";
+    empty.textContent = "暂无行程，先在上方登记一条吧。";
+    tripStrip.appendChild(empty);
+    return;
+  }
 
   visibleTrips.forEach((trip) => {
     const card = document.createElement("button");
@@ -406,20 +475,20 @@ function renderTripList(visibleTrips) {
     card.innerHTML = `
       <div class="trip-title">
         <span>${escapeHtml(trip.title)}</span>
-        <span>${modeLabel(trip.mode)}</span>
+        <span class="mode-label">${modeLabel(trip.mode)}</span>
       </div>
       <div class="trip-meta">
-        <span>${escapeHtml(trip.origin)} -> ${escapeHtml(trip.destination)}</span>
-        <span>${escapeHtml(trip.date)} ${escapeHtml(trip.departureTime)} - ${escapeHtml(trip.arrivalTime)}</span>
-        <span>${escapeHtml(trip.operator)} · ${trip.distanceKm || 0} km</span>
+        <span class="route">${escapeHtml(trip.origin)} → ${escapeHtml(trip.destination)}</span>
+        <span>${escapeHtml(trip.date)} · ${trip.distanceKm || 0} km</span>
       </div>
-      <span class="trip-action">查看地图轨迹</span>
     `;
     card.addEventListener("click", () => {
       selectTrip(trip.id, { focusMap: true });
     });
-    tripList.appendChild(card);
+    tripStrip.appendChild(card);
   });
+
+  tripStrip.querySelector(".trip-card.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
 function renderMap(visibleTrips) {
@@ -546,22 +615,19 @@ function fitMapToVisibleTrips() {
 
 function selectTrip(tripId, options = {}) {
   selectedTripId = tripId;
-  renderTripList(getVisibleTrips());
+  renderTripStrip(getVisibleTrips());
   renderMap(getVisibleTrips());
-  renderDetail();
-
-  const card = tripList.querySelector(`[data-trip-id="${CSS.escape(tripId)}"]`);
-  card?.scrollIntoView({ block: "nearest" });
+  renderHero();
 
   if (options.focusMap) {
     fitMapToTrip(tripId);
   }
 }
 
-function renderDetail() {
+function renderHero() {
   const trip = trips.find((item) => item.id === selectedTripId);
   if (!trip) {
-    detail.innerHTML = "<p>还没有行程。</p>";
+    heroOverlay.innerHTML = `<p class="hero-route">暂无行程</p>`;
     return;
   }
 
@@ -570,39 +636,45 @@ function renderDetail() {
     return;
   }
 
-  detail.innerHTML = `
-    <div>
-      <h3 class="detail-title">${escapeHtml(trip.title)}</h3>
-      <p class="trip-meta">${escapeHtml(trip.origin)} -> ${escapeHtml(trip.destination)}</p>
+  heroOverlay.innerHTML = `
+    <div class="hero-topline">
+      <span class="mode-badge ${trip.mode}"><i class="mode-dot"></i>${modeLabel(trip.mode)} · ${statusLabel(trip.status)}</span>
+      <div class="hero-actions">
+        ${trip.mode === "rail" && trip.origin !== "待确认" && trip.destination !== "待确认" ? `<button class="ghost-button small" data-action="tickets" type="button">实时余票</button>` : ""}
+        <button class="ghost-button small" data-action="edit" type="button">编辑</button>
+        <button class="danger-button small" data-action="delete" type="button">删除</button>
+      </div>
     </div>
-    ${detailRow("方式", modeLabel(trip.mode))}
-    ${detailRow("日期", trip.date)}
-    ${detailRow("时间", `${trip.departureTime} - ${trip.arrivalTime}`)}
-    ${detailRow("运营方", trip.operator)}
-    ${detailRow("状态", statusLabel(trip.status))}
-    ${detailRow("里程", `${trip.distanceKm || 0} km`)}
-    ${detailRow("轨迹", routeDescription(trip))}
-    ${detailRow("备注", trip.notes)}
-    <div class="detail-actions">
-      <button class="ghost-button" data-action="edit" type="button">编辑</button>
-      <button class="danger-button" data-action="delete" type="button">删除</button>
+    <div>
+      <p class="hero-route">${escapeHtml(trip.origin)}<span class="arrow">→</span>${escapeHtml(trip.destination)}</p>
+      <div class="hero-meta">
+        <span><strong>${escapeHtml(trip.title)}</strong></span>
+        <span>${escapeHtml(trip.operator)}</span>
+        <span>${escapeHtml(trip.date)}</span>
+        <span>${escapeHtml(trip.departureTime)} - ${escapeHtml(trip.arrivalTime)}</span>
+        <span>${trip.distanceKm || 0} km</span>
+      </div>
     </div>
   `;
 
-  detail.querySelector('[data-action="edit"]').addEventListener("click", () => {
+  heroOverlay.querySelector('[data-action="edit"]').addEventListener("click", () => {
     editingTripId = trip.id;
-    renderDetail();
+    renderHero();
   });
 
-  detail.querySelector('[data-action="delete"]').addEventListener("click", () => {
+  heroOverlay.querySelector('[data-action="tickets"]')?.addEventListener("click", () => {
+    showTicketPanel(trip);
+  });
+
+  heroOverlay.querySelector('[data-action="delete"]').addEventListener("click", () => {
     deleteTrip(trip.id);
   });
 }
 
 function renderEditForm(trip) {
-  detail.innerHTML = `
+  heroOverlay.innerHTML = `
     <form class="edit-form" id="editForm">
-      <h3 class="detail-title">编辑行程</h3>
+      <h3>编辑行程</h3>
       ${editField("editMode", "方式", modeSelectOptions(trip.mode))}
       ${editField("editTitle", "标题", `<input id="editTitle" value="${escapeHtml(trip.title)}" required>`)}
       ${editField("editOrigin", "起点", `<input id="editOrigin" value="${escapeHtml(trip.origin)}" required>`)}
@@ -614,21 +686,21 @@ function renderEditForm(trip) {
       ${editField("editDistance", "里程(km)", `<input id="editDistance" type="number" min="0" value="${trip.distanceKm || 0}">`)}
       ${editField("editStatus", "状态", statusSelectOptions(trip.status))}
       ${editField("editNotes", "备注", `<textarea id="editNotes" rows="3">${escapeHtml(trip.notes || "")}</textarea>`)}
-      <div class="detail-actions">
+      <div class="edit-actions">
         <button class="primary-button" type="submit">保存</button>
         <button class="ghost-button" data-action="cancel" type="button">取消</button>
       </div>
     </form>
   `;
 
-  detail.querySelector("#editForm").addEventListener("submit", (event) => {
+  heroOverlay.querySelector("#editForm").addEventListener("submit", (event) => {
     event.preventDefault();
     saveTripEdit(trip.id);
   });
 
-  detail.querySelector('[data-action="cancel"]').addEventListener("click", () => {
+  heroOverlay.querySelector('[data-action="cancel"]').addEventListener("click", () => {
     editingTripId = null;
-    renderDetail();
+    renderHero();
   });
 }
 
@@ -652,21 +724,298 @@ function saveTripEdit(tripId) {
   const trip = trips.find((item) => item.id === tripId);
   if (!trip) return;
 
-  trip.mode = detail.querySelector("#editMode").value;
-  trip.title = detail.querySelector("#editTitle").value.trim() || trip.title;
-  trip.origin = normalizePlace(detail.querySelector("#editOrigin").value.trim()) || trip.origin;
-  trip.destination = normalizePlace(detail.querySelector("#editDestination").value.trim()) || trip.destination;
-  trip.date = detail.querySelector("#editDate").value || trip.date;
-  trip.departureTime = detail.querySelector("#editDeparture").value.trim() || "待确认";
-  trip.arrivalTime = detail.querySelector("#editArrival").value.trim() || "待确认";
-  trip.operator = detail.querySelector("#editOperator").value.trim() || trip.operator;
-  trip.distanceKm = Number(detail.querySelector("#editDistance").value) || estimateDistance(trip.origin, trip.destination);
-  trip.status = detail.querySelector("#editStatus").value;
-  trip.notes = detail.querySelector("#editNotes").value.trim();
+  trip.mode = heroOverlay.querySelector("#editMode").value;
+  trip.title = heroOverlay.querySelector("#editTitle").value.trim() || trip.title;
+  trip.origin = normalizePlace(heroOverlay.querySelector("#editOrigin").value.trim()) || trip.origin;
+  trip.destination = normalizePlace(heroOverlay.querySelector("#editDestination").value.trim()) || trip.destination;
+  trip.date = heroOverlay.querySelector("#editDate").value || trip.date;
+  trip.departureTime = heroOverlay.querySelector("#editDeparture").value.trim() || "待确认";
+  trip.arrivalTime = heroOverlay.querySelector("#editArrival").value.trim() || "待确认";
+  trip.operator = heroOverlay.querySelector("#editOperator").value.trim() || trip.operator;
+  trip.distanceKm = Number(heroOverlay.querySelector("#editDistance").value) || estimateDistance(trip.origin, trip.destination);
+  trip.status = heroOverlay.querySelector("#editStatus").value;
+  trip.notes = heroOverlay.querySelector("#editNotes").value.trim();
 
   editingTripId = null;
   persistTrips();
   render();
+}
+
+// ---------- 12306 集成：车次经停站选择与自动补全 ----------
+
+/** 登记铁路车次后：带起讫区间时弹出经停站选择器；否则退回自动补全。 */
+async function handleRailStationSelection(tripId) {
+  const trip = trips.find((item) => item.id === tripId);
+  if (!trip || trip.mode !== "rail") return;
+  if (!/^[GDCZTK]\d{1,5}$/i.test(trip.title)) return;
+  if (trip.origin === "待确认" || trip.destination === "待确认") {
+    autoCompleteRailTrip(tripId);
+    return;
+  }
+  await openStationSelector(tripId);
+}
+
+/** 在 Hero 卡片内查询车次全部经停站，并让用户选择上车站与到达站。 */
+async function openStationSelector(tripId) {
+  const trip = trips.find((item) => item.id === tripId);
+  if (!trip) return;
+
+  // 首次打开时渲染面板框架；区间修正重试时仅刷新列表区
+  if (!heroOverlay.querySelector(".station-panel")) {
+    heroOverlay.innerHTML = `
+      <div class="ticket-panel station-panel">
+        <div class="ticket-panel-head">
+          <div>
+            <p class="ticket-title">${escapeHtml(trip.title)} 站点选择</p>
+            <p class="ticket-sub">${escapeHtml(trip.date)} · 请选择上车站与到达站</p>
+          </div>
+          <button class="ghost-button small" data-action="skip" type="button">跳过</button>
+        </div>
+        <div class="station-list"></div>
+      </div>
+    `;
+
+    heroOverlay.querySelector('[data-action="skip"]').addEventListener("click", () => {
+      autoCompleteRailTrip(tripId);
+    });
+  }
+
+  const listEl = heroOverlay.querySelector(".station-list");
+  listEl.innerHTML = '<p class="ticket-loading">正在查询 12306 经停站…</p>';
+
+  try {
+    const response = await fetch("/api/12306/train-route", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        train_no: trip.title,
+        from_station: trip.origin,
+        to_station: trip.destination,
+        train_date: trip.date
+      })
+    });
+    const result = await response.json();
+
+    if (!result.success || !result.stations || result.stations.length < 2) {
+      renderStationRetry(trip, result.error || "无法获取经停站信息");
+      return;
+    }
+
+    renderStationSelector(trip, result.stations);
+  } catch (e) {
+    renderStationRetry(trip, "网络不可用，无法查询 12306 经停站。");
+  }
+}
+
+/** 查询失败时展示区间修正表单，引导用户改正区间后重新查询。 */
+function renderStationRetry(trip, errorMsg) {
+  const listEl = heroOverlay.querySelector(".station-list");
+  listEl.innerHTML = `
+    <p class="ticket-error">${escapeHtml(errorMsg)}</p>
+    <p class="ticket-sub">该车次可能不经过 ${escapeHtml(trip.origin)} → ${escapeHtml(trip.destination)}，请修正起讫区间后重试：</p>
+    <div class="station-pick">
+      <label class="edit-field"><span>出发</span><input id="retryFrom" value="${escapeHtml(trip.origin)}"></label>
+      <label class="edit-field"><span>到达</span><input id="retryTo" value="${escapeHtml(trip.destination)}"></label>
+    </div>
+    <div class="edit-actions">
+      <button class="primary-button" data-action="retry" type="button">重新查询</button>
+    </div>
+  `;
+
+  listEl.querySelector('[data-action="retry"]').addEventListener("click", async () => {
+    const from = listEl.querySelector("#retryFrom").value.trim();
+    const to = listEl.querySelector("#retryTo").value.trim();
+    if (!from || !to) return;
+    trip.origin = normalizePlace(from);
+    trip.destination = normalizePlace(to);
+    persistTrips();
+    await openStationSelector(trip.id);
+  });
+}
+
+/** 渲染经停站选择器：上车/到达下拉 + 区间预览 + 确认。 */
+function renderStationSelector(trip, stations) {
+  const listEl = heroOverlay.querySelector(".station-list");
+  const optionText = (s) =>
+    `${s.station_name}  ${s.arrive_time !== "----" ? s.arrive_time : ""} ${s.start_time !== "----" ? s.start_time : ""}`.trim();
+  const options = stations.map((s, index) => `<option value="${index}">${escapeHtml(optionText(s))}</option>`).join("");
+
+  // 默认选中与用户输入区间匹配的站；不匹配时取首站与末站
+  const fromIndex = stations.findIndex((s) => s.station_name === trip.origin);
+  const toIndex = stations.findIndex((s) => s.station_name === trip.destination);
+  const from = fromIndex >= 0 ? fromIndex : 0;
+  const to = toIndex >= 0 ? toIndex : stations.length - 1;
+
+  listEl.innerHTML = `
+    <div class="station-pick">
+      <label class="edit-field"><span>上车</span>
+        <select id="pickFrom">${options}</select>
+      </label>
+      <label class="edit-field"><span>到达</span>
+        <select id="pickTo">${options}</select>
+      </label>
+    </div>
+    <div class="station-preview"></div>
+    <div class="edit-actions">
+      <button class="primary-button" data-action="confirm" type="button">确认登记</button>
+    </div>
+  `;
+
+  const pickFrom = listEl.querySelector("#pickFrom");
+  const pickTo = listEl.querySelector("#pickTo");
+  pickFrom.value = String(from);
+  pickTo.value = String(to);
+
+  const updatePreview = () => {
+    const previewEl = listEl.querySelector(".station-preview");
+    const f = stations[Number(pickFrom.value)];
+    const t = stations[Number(pickTo.value)];
+    if (Number(pickFrom.value) >= Number(pickTo.value)) {
+      previewEl.innerHTML = '<p class="ticket-error">上车站必须早于到达站</p>';
+      return;
+    }
+    previewEl.innerHTML =
+      `<p class="station-route">${escapeHtml(f.station_name)} ${escapeHtml(f.start_time)} → ${escapeHtml(t.station_name)} ${escapeHtml(t.arrive_time)}</p>` +
+      `<p class="ticket-sub">${escapeHtml(trip.title)} · ${escapeHtml(trip.date)}</p>`;
+  };
+
+  pickFrom.addEventListener("change", updatePreview);
+  pickTo.addEventListener("change", updatePreview);
+  updatePreview();
+
+  listEl.querySelector('[data-action="confirm"]').addEventListener("click", () => {
+    saveStationSelection(trip, stations);
+  });
+}
+
+/** 用户确认上下车站后写入正式行程。 */
+function saveStationSelection(trip, stations) {
+  const fromIndex = Number(heroOverlay.querySelector("#pickFrom").value);
+  const toIndex = Number(heroOverlay.querySelector("#pickTo").value);
+  if (fromIndex >= toIndex) {
+    heroOverlay.querySelector(".station-preview").innerHTML = '<p class="ticket-error">上车站必须早于到达站</p>';
+    return;
+  }
+
+  const from = stations[fromIndex];
+  const to = stations[toIndex];
+  trip.origin = from.station_name;
+  trip.destination = to.station_name;
+  if (from.start_time !== "----") trip.departureTime = from.start_time;
+  if (to.arrive_time !== "----") trip.arrivalTime = to.arrive_time;
+  trip.status = "completed";
+  trip.notes = `已通过 12306 确认区间：${from.station_name} → ${to.station_name}。`;
+  editingTripId = null;
+  persistTrips();
+  render();
+}
+
+/** 登记铁路车次后，自动向本地 12306 代理查询真实发到时刻补全草稿（失败静默）。 */
+async function autoCompleteRailTrip(tripId) {
+  const trip = trips.find((item) => item.id === tripId);
+  if (!trip || trip.mode !== "rail") return;
+  if (!/^[GDCZTK]\d{1,5}$/i.test(trip.title)) return;
+  if (trip.origin === "待确认" || trip.destination === "待确认") return;
+
+  try {
+    const response = await fetch("/api/12306/query-tickets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from_station: trip.origin,
+        to_station: trip.destination,
+        train_date: trip.date
+      })
+    });
+    const result = await response.json();
+    if (!result.success || !result.trains) return;
+
+    const train = result.trains.find((t) => t.train_no.toUpperCase() === trip.title.toUpperCase());
+    if (!train) return;
+
+    let changed = false;
+    if (train.start_time && train.start_time !== "----") {
+      trip.departureTime = train.start_time;
+      changed = true;
+    }
+    if (train.arrive_time && train.arrive_time !== "----") {
+      trip.arrivalTime = train.arrive_time;
+      changed = true;
+    }
+    if (changed) {
+      trip.notes = `${trip.notes || ""} 已通过 12306 自动补全时刻（历时 ${train.duration}）。`.trim();
+      persistTrips();
+      render();
+    }
+  } catch (e) {
+    // 离线或服务不可用时静默保留手工草稿
+  }
+}
+
+/** 在 Hero 卡片内展示指定线路的实时余票列表。 */
+async function showTicketPanel(trip) {
+  heroOverlay.innerHTML = `
+    <div class="ticket-panel">
+      <div class="ticket-panel-head">
+        <div>
+          <p class="ticket-title">${escapeHtml(trip.origin)} → ${escapeHtml(trip.destination)}</p>
+          <p class="ticket-sub">${escapeHtml(trip.date)} · 12306 实时余票</p>
+        </div>
+        <button class="ghost-button small" data-action="close" type="button">返回</button>
+      </div>
+      <p class="ticket-loading">正在查询 12306…</p>
+      <div class="ticket-list"></div>
+    </div>
+  `;
+
+  heroOverlay.querySelector('[data-action="close"]').addEventListener("click", () => {
+    renderHero();
+  });
+
+  const loadingEl = heroOverlay.querySelector(".ticket-loading");
+  const listEl = heroOverlay.querySelector(".ticket-list");
+
+  try {
+    const response = await fetch("/api/12306/query-tickets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from_station: trip.origin,
+        to_station: trip.destination,
+        train_date: trip.date
+      })
+    });
+    const result = await response.json();
+    loadingEl.hidden = true;
+
+    if (!result.success || !result.trains || !result.trains.length) {
+      listEl.innerHTML = `<p class="ticket-error">${escapeHtml(result.error || "未查询到余票信息")}</p>`;
+      return;
+    }
+
+    const trains = result.trains.slice(0, 40);
+    listEl.innerHTML = trains
+      .map(
+        (t) => `
+        <div class="ticket-row ${t.train_no.toUpperCase() === trip.title.toUpperCase() ? " match" : ""}">
+          <span class="ticket-code">${escapeHtml(t.train_no)}</span>
+          <span class="ticket-times">${escapeHtml(t.start_time)} → ${escapeHtml(t.arrive_time)} · ${escapeHtml(t.duration)}</span>
+          <span class="ticket-stations">${escapeHtml(t.from_station)} → ${escapeHtml(t.to_station)}</span>
+          <span class="ticket-seats">${seatSummary(t.seats)}</span>
+        </div>
+      `
+      )
+      .join("");
+  } catch (e) {
+    loadingEl.hidden = true;
+    listEl.innerHTML = '<p class="ticket-error">网络不可用，无法查询 12306 余票（离线模式）。</p>';
+  }
+}
+
+function seatSummary(seats) {
+  const entries = Object.entries(seats || {}).filter(([, value]) => value && value !== "无" && value !== "--");
+  if (!entries.length) return "无票";
+  return entries.slice(0, 3).map(([key, value]) => `${key} ${value}`).join(" · ");
 }
 
 function deleteTrip(tripId) {
@@ -719,16 +1068,6 @@ function importTrips(file) {
   reader.readAsText(file);
 }
 
-function routeDescription(trip) {
-  if (trip.mode === "flight") return "弧线航路，连接起降机场/城市";
-  if (trip.mode === "rail") return "近似铁路轨迹，包含主要中间点";
-  return "近似道路轨迹，后续可由路线服务补全";
-}
-
-function detailRow(label, value) {
-  return `<div class="detail-row"><span>${escapeHtml(label)}</span><span>${escapeHtml(String(value || "待确认"))}</span></div>`;
-}
-
 function renderStats() {
   const cities = new Set();
   trips.forEach((trip) => {
@@ -736,11 +1075,11 @@ function renderStats() {
     if (trip.destination !== "待确认") cities.add(trip.destination);
   });
 
-  storedCount.textContent = `${trips.length} 条记录`;
-  totalDistance.textContent = `${trips.reduce((sum, trip) => sum + (trip.distanceKm || 0), 0)} km`;
-  cityCount.textContent = String(cities.size);
-  flightCount.textContent = String(trips.filter((trip) => trip.mode === "flight").length);
-  railCount.textContent = String(trips.filter((trip) => trip.mode === "rail").length);
+  const totalKm = trips.reduce((sum, trip) => sum + (trip.distanceKm || 0), 0);
+  const flightCount = trips.filter((trip) => trip.mode === "flight").length;
+  const railCount = trips.filter((trip) => trip.mode === "rail").length;
+  statsLine.innerHTML =
+    `${trips.length} 条 · <strong>${totalKm} km</strong> · ${cities.size} 城 · 飞 ${flightCount} · 铁 ${railCount}`;
 }
 
 function modeLabel(mode) {

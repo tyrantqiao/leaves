@@ -3,135 +3,62 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Leaves Prototype</title>
+    <title>Leaves</title>
     <link rel="stylesheet" href="./styles.css">
     <!-- Leaflet 本地优先：离线也能运行；加载失败时由 app.js 自动降级到 CDN -->
     <link rel="stylesheet" href="./vendor/leaflet/leaflet.css">
     <script src="./vendor/leaflet/leaflet.js"></script>
+    <!-- 离线矢量底图数据（中国省级边界），以 script 方式加载以兼容 file:// 双击打开 -->
+    <script src="./vendor/china-provinces.js"></script>
   </head>
   <body>
     <div class="app-shell">
-      <aside class="sidebar" aria-label="主导航">
-        <div class="brand">
+      <header class="topbar">
+        <div class="brand" aria-label="Leaves">
           <div class="brand-mark">L</div>
-          <div>
-            <strong>Leaves</strong>
-            <span>出行日志</span>
-          </div>
+          <strong>Leaves</strong>
         </div>
-        <nav class="nav-list">
-          <button class="nav-item active" type="button">总览</button>
-          <button class="nav-item" type="button">行程</button>
-          <button class="nav-item" type="button">地图</button>
-          <button class="nav-item" type="button">统计</button>
-          <button class="nav-item" type="button">设置</button>
-        </nav>
-        <div class="sidebar-summary">
-          <span>本地优先</span>
-          <strong id="storedCount">0 条记录</strong>
+        <form id="quickAddForm" class="quick-add" aria-label="快速登记">
+          <label class="input-label" for="tripInput">行程输入</label>
+          <input id="tripInput" name="tripInput" autocomplete="off" placeholder="输入航班号 / 车次号 / 路线，如 CA1234、G1234、上海虹桥 到 杭州东">
+          <label class="input-label" for="tripDate">日期</label>
+          <input id="tripDate" name="tripDate" type="date">
+          <button class="primary-button" type="submit">登记</button>
+        </form>
+        <div class="top-actions">
+          <button class="ghost-button small export-json" type="button">导出</button>
+          <button class="ghost-button small import-json" type="button">导入</button>
         </div>
-        <div class="sidebar-data">
-          <span>数据管理</span>
-          <div class="sidebar-data-actions">
-            <button class="export-json" type="button">导出 JSON</button>
-            <button class="import-json" type="button">导入 JSON</button>
-          </div>
-          <input id="importFile" type="file" accept="application/json,.json" hidden>
-        </div>
-      </aside>
+      </header>
 
       <main class="main">
-        <header class="topbar">
-          <div>
-            <p class="eyebrow">快速登记</p>
-            <h1>输入航班号、车次号或路线</h1>
+        <section id="heroCard" class="hero-card" aria-label="当前行程">
+          <div class="map-canvas">
+            <div id="leafletMap" class="leaflet-map" aria-label="行程地图"></div>
+            <div id="mapFallback" class="map-fallback" hidden>
+              <strong>地图资源未加载</strong>
+              <span>正在加载本地地图资源，若长时间空白请强制刷新（Ctrl+F5）。</span>
+            </div>
           </div>
-          <form id="quickAddForm" class="quick-add">
-            <label class="input-label" for="tripInput">行程输入</label>
-            <input id="tripInput" name="tripInput" autocomplete="off" placeholder="例如 CA1234 / G1234 / 上海虹桥 到 杭州东">
-            <input id="tripDate" name="tripDate" type="date">
-            <button class="primary-button" type="submit">登记</button>
-          </form>
-        </header>
+          <div id="heroOverlay" class="hero-overlay"></div>
+        </section>
 
-        <section class="workspace">
-          <section class="timeline-panel" aria-label="行程时间线">
-            <div class="panel-header">
-              <div>
-                <p class="eyebrow">Timeline</p>
-                <h2>近期行程</h2>
-              </div>
-              <div class="timeline-controls">
-                <div class="segmented" role="group" aria-label="交通方式筛选">
-                  <button class="segment active" data-filter="all" type="button">全部</button>
-                  <button class="segment" data-filter="flight" type="button">飞行</button>
-                  <button class="segment" data-filter="rail" type="button">铁路</button>
-                  <button class="segment" data-filter="road" type="button">道路</button>
-                </div>
-                <div class="timeline-actions">
-                  <button class="ghost-button small export-json" type="button">导出</button>
-                  <button class="ghost-button small import-json" type="button">导入</button>
-                </div>
-              </div>
+        <section class="bottom-panel" aria-label="行程列表">
+          <div class="bottom-toolbar">
+            <div class="segmented" role="group" aria-label="交通方式筛选">
+              <button class="segment active" data-filter="all" type="button">全部</button>
+              <button class="segment" data-filter="flight" type="button">飞行</button>
+              <button class="segment" data-filter="rail" type="button">铁路</button>
+              <button class="segment" data-filter="road" type="button">道路</button>
             </div>
-            <div id="tripList" class="trip-list"></div>
-          </section>
-
-          <section class="map-panel" aria-label="地图回顾">
-            <div class="map-toolbar">
-              <div>
-                <p class="eyebrow">Map Review</p>
-                <h2>2026 足迹</h2>
-              </div>
-              <div class="map-actions">
-                <span id="tileSourceLabel" class="tile-source"></span>
-                <div class="map-legend">
-                  <span><i class="legend flight"></i>航班</span>
-                  <span><i class="legend rail"></i>铁路</span>
-                  <span><i class="legend road"></i>道路</span>
-                </div>
-                <button id="fitAllButton" class="ghost-button" type="button">重置视角</button>
-              </div>
-            </div>
-            <div class="map-canvas">
-              <div id="leafletMap" class="leaflet-map" aria-label="真实地图"></div>
-              <div id="mapFallback" class="map-fallback" hidden>
-                <strong>地图资源未加载</strong>
-                <span>正在尝试多个 CDN 和瓦片源，若长时间空白请检查网络，或稍后在正式 Tauri 版本中配置本地/国内瓦片源。</span>
-              </div>
-            </div>
-          </section>
-
-          <aside class="detail-panel" aria-label="行程详情">
-            <div class="panel-header compact">
-              <div>
-                <p class="eyebrow">Detail</p>
-                <h2>行程详情</h2>
-              </div>
-            </div>
-            <div id="tripDetail" class="trip-detail"></div>
-            <div class="stats-grid">
-              <div class="metric">
-                <span>总里程</span>
-                <strong id="totalDistance">0 km</strong>
-              </div>
-              <div class="metric">
-                <span>城市</span>
-                <strong id="cityCount">0</strong>
-              </div>
-              <div class="metric">
-                <span>飞行</span>
-                <strong id="flightCount">0</strong>
-              </div>
-              <div class="metric">
-                <span>铁路</span>
-                <strong id="railCount">0</strong>
-              </div>
-            </div>
-          </aside>
+            <span id="tileSourceLabel" class="tile-source"></span>
+            <span id="statsLine" class="stats-line"></span>
+          </div>
+          <div id="tripStrip" class="trip-strip" aria-label="近期行程"></div>
         </section>
       </main>
     </div>
+    <input id="importFile" type="file" accept="application/json,.json" hidden>
     <script src="./app.js"></script>
   </body>
 </html>
