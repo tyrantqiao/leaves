@@ -1,0 +1,16 @@
+{
+  "name": "leaves",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Leaves 个人出行记录软件 - 桌面原型开发服务器",
+  "scripts": {
+    "start": "node apps/desktop-prototype/dev-server.js",
+    "dev": "node apps/desktop-prototype/dev-server.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4"
+  }
+}
