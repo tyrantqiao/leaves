@@ -37,7 +37,11 @@ const API_ROUTES = {
 function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
-    "Cache-Control": "no-store"
+    "Cache-Control": "no-store",
+    // 允许 file:// 双击打开时跨域访问本地 API（数据持久化兜底）
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type"
   });
   response.end(JSON.stringify(payload));
 }
@@ -59,17 +63,34 @@ function readJsonBody(request) {
 }
 
 async function handleApiRequest(request, response, pathname, searchParams) {
-  // 行程数据持久化：GET 读文件（无文件返回空数组），PUT 整体覆盖写入
+  // 跨域预检（file:// 页面跨域访问本地 API）
+  if (request.method === "OPTIONS") {
+    response.writeHead(204, {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Cache-Control": "no-store"
+    });
+    response.end();
+    return true;
+  }
+
+  // 行程数据持久化：GET 读文件（无文件返回 204），PUT 整体覆盖写入
   if (pathname === "/api/data/trips") {
     if (request.method === "GET") {
       fs.readFile(TRIPS_FILE, (error, data) => {
         if (error) {
-          sendJson(response, 200, []);
+          response.writeHead(204, {
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "no-store"
+          });
+          response.end();
           return;
         }
         response.writeHead(200, {
           "Content-Type": "application/json; charset=utf-8",
-          "Cache-Control": "no-store"
+          "Cache-Control": "no-store",
+          "Access-Control-Allow-Origin": "*"
         });
         response.end(data);
       });
@@ -164,6 +185,22 @@ const server = http.createServer(async (request, response) => {
     if (error) {
       response.writeHead(404);
       response.end("Not found");
+      return;
+    }
+
+    // 注入本地 API 地址：file:// 双击打开时用于跨域访问持久化接口
+    if (pathname === "/index.html") {
+      const html = data
+        .toString("utf8")
+        .replace(
+          "</head>",
+          `<script>window.LEAVES_API_BASE = "http://${host}:${port}";<\/script></head>`
+        );
+      response.writeHead(200, {
+        "Content-Type": contentTypes[".html"] || "text/html; charset=utf-8",
+        "Cache-Control": "no-store"
+      });
+      response.end(html);
       return;
     }
 

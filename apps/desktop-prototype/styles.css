@@ -483,6 +483,20 @@ button {
   width: min(560px, 100%);
 }
 
+.station-date {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.station-date .edit-field {
+  grid-template-columns: 44px 160px;
+}
+
+.station-date #dateHint {
+  margin: 0;
+}
+
 .station-list {
   display: grid;
   gap: 10px;

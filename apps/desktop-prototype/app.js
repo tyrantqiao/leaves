@@ -30,23 +30,111 @@ const tileSources = [
 const places = {
   "北京": { lat: 39.9042, lng: 116.4074 },
   "北京首都": { lat: 40.0801, lng: 116.5846 },
+  "北京南": { lat: 39.8652, lng: 116.3785 },
   "上海": { lat: 31.2304, lng: 121.4737 },
   "上海虹桥": { lat: 31.1968, lng: 121.3260 },
+  "上海南": { lat: 31.1548, lng: 121.4299 },
   "上海浦东": { lat: 31.1443, lng: 121.8083 },
   "杭州": { lat: 30.2741, lng: 120.1551 },
   "杭州东": { lat: 30.2891, lng: 120.2120 },
+  "杭州南": { lat: 30.1715, lng: 120.3100 },
   "广州": { lat: 23.1291, lng: 113.2644 },
   "广州南": { lat: 22.9892, lng: 113.2695 },
   "深圳": { lat: 22.5431, lng: 114.0579 },
   "深圳北": { lat: 22.6090, lng: 114.0294 },
   "成都": { lat: 30.5728, lng: 104.0668 },
+  "成都东": { lat: 30.6310, lng: 104.1430 },
   "西安": { lat: 34.3416, lng: 108.9398 },
+  "西安北": { lat: 34.3760, lng: 108.9340 },
   "南京": { lat: 32.0603, lng: 118.7969 },
+  "南京南": { lat: 31.9705, lng: 118.7958 },
   "武汉": { lat: 30.5928, lng: 114.3055 },
   "重庆": { lat: 29.5630, lng: 106.5516 },
+  "重庆北": { lat: 29.6090, lng: 106.5460 },
   "嘉兴": { lat: 30.7461, lng: 120.7555 },
-  "虎门": { lat: 22.8266, lng: 113.6730 }
+  "虎门": { lat: 22.8266, lng: 113.6730 },
+  "合肥": { lat: 31.8206, lng: 117.2272 },
+  "合肥南": { lat: 31.8006, lng: 117.3020 },
+  "庐江西": { lat: 31.2800, lng: 117.2800 },
+  "无锡": { lat: 31.4912, lng: 120.3119 },
+  "无锡东": { lat: 31.5883, lng: 120.4360 },
+  "苏州": { lat: 31.2989, lng: 120.5853 },
+  "苏州北": { lat: 31.4030, lng: 120.6400 },
+  "常州": { lat: 31.8107, lng: 119.9741 },
+  "常州北": { lat: 31.8620, lng: 119.9800 },
+  "徐州": { lat: 34.2044, lng: 117.2857 },
+  "徐州东": { lat: 34.2830, lng: 117.3100 },
+  "宁波": { lat: 29.8683, lng: 121.5440 },
+  "温州": { lat: 27.9938, lng: 120.6994 },
+  "温州南": { lat: 27.9900, lng: 120.6600 },
+  "福州": { lat: 26.0745, lng: 119.2965 },
+  "福州南": { lat: 25.9900, lng: 119.3800 },
+  "厦门": { lat: 24.4798, lng: 118.0894 },
+  "厦门北": { lat: 24.6700, lng: 118.1300 },
+  "长沙": { lat: 28.2282, lng: 112.9388 },
+  "长沙南": { lat: 28.1500, lng: 113.0600 },
+  "郑州": { lat: 34.7466, lng: 113.6254 },
+  "郑州东": { lat: 34.7200, lng: 113.7800 },
+  "济南": { lat: 36.6512, lng: 117.1201 },
+  "济南西": { lat: 36.6700, lng: 116.8900 },
+  "青岛": { lat: 36.0671, lng: 120.3826 },
+  "青岛北": { lat: 36.2300, lng: 120.3600 },
+  "天津": { lat: 39.3434, lng: 117.3616 },
+  "天津西": { lat: 39.1600, lng: 117.1600 },
+  "石家庄": { lat: 38.0428, lng: 114.5149 },
+  "太原": { lat: 37.8706, lng: 112.5489 },
+  "太原南": { lat: 37.7800, lng: 112.6000 },
+  "哈尔滨": { lat: 45.8038, lng: 126.5349 },
+  "哈尔滨西": { lat: 45.7000, lng: 126.5800 },
+  "沈阳": { lat: 41.8057, lng: 123.4315 },
+  "沈阳北": { lat: 41.8100, lng: 123.4300 },
+  "大连": { lat: 38.9140, lng: 121.6147 },
+  "大连北": { lat: 39.0500, lng: 121.6200 },
+  "昆明": { lat: 24.8801, lng: 102.8329 },
+  "昆明南": { lat: 24.8800, lng: 102.8300 },
+  "贵阳": { lat: 26.6470, lng: 106.6302 },
+  "贵阳北": { lat: 26.6500, lng: 106.6300 },
+  "南昌": { lat: 28.6820, lng: 115.8579 },
+  "南昌西": { lat: 28.6800, lng: 115.8600 },
+  "兰州": { lat: 36.0611, lng: 103.8343 },
+  "兰州西": { lat: 36.0600, lng: 103.8300 },
+  "乌鲁木齐": { lat: 43.8256, lng: 87.6168 },
+  "南宁": { lat: 22.8170, lng: 108.3665 },
+  "南宁东": { lat: 22.8200, lng: 108.3700 },
+  "海口": { lat: 20.0444, lng: 110.1999 },
+  "三亚": { lat: 18.2528, lng: 109.5119 },
+  "扬州": { lat: 32.3942, lng: 119.4129 },
+  "镇江": { lat: 32.1878, lng: 119.4258 },
+  "南通": { lat: 31.9802, lng: 120.8943 },
+  "盐城": { lat: 33.3495, lng: 120.1616 },
+  "绍兴": { lat: 30.0303, lng: 120.5802 },
+  "金华": { lat: 29.0792, lng: 119.6474 },
+  "义乌": { lat: 29.3068, lng: 120.0751 },
+  "台州": { lat: 28.6564, lng: 121.4208 },
+  "湖州": { lat: 30.8945, lng: 120.0868 },
+  "芜湖": { lat: 31.3525, lng: 118.4331 },
+  "安庆": { lat: 30.5434, lng: 117.0635 },
+  "蚌埠": { lat: 32.9163, lng: 117.3897 },
+  "六安": { lat: 31.7347, lng: 116.5078 },
+  "黄山": { lat: 29.7147, lng: 118.3376 }
 };
+
+/** 站名 → 坐标：精确匹配车站/城市，找不到时去掉方位后缀回退到城市（如 合肥南→合肥）。 */
+function resolvePlace(name) {
+  if (!name) return null;
+  if (places[name]) return places[name];
+  const candidates = [
+    name.replace(/站$/, ""),
+    name.replace(/(南|北|东|西|虹桥|机场)$/, ""),
+    name.replace(/(南|北|东|西|虹桥|机场)站$/, "")
+  ];
+  for (const candidate of candidates) {
+    if (candidate && candidate !== name && places[candidate]) {
+      return places[candidate];
+    }
+  }
+  return null;
+}
 
 const knownRoutes = {
   "rail:上海:杭州": ["上海虹桥", "嘉兴", "杭州东"],
@@ -131,7 +219,7 @@ const exportButtons = document.querySelectorAll(".export-json");
 const importButtons = document.querySelectorAll(".import-json");
 const importFile = document.querySelector("#importFile");
 
-// 登记日期：只能选择今天及以后（12306 预售期限制），使用本地日期避免 UTC 时区偏差
+// 登记日期：默认今天。登记的是过往行程，允许选择任意历史日期；查询车次时另用查询日期（今天~+14天）
 function localToday() {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, "0");
@@ -139,7 +227,6 @@ function localToday() {
 }
 
 dateInput.value = localToday();
-dateInput.min = localToday();
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -334,18 +421,28 @@ function loadTripsFromLocal() {
 
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length ? parsed : seedTrips;
+    // 空数组也尊重（用户删光了行程后不复活 demo 数据）
+    return Array.isArray(parsed) ? parsed : seedTrips;
   } catch {
     return seedTrips;
   }
 }
 
+/** 本地 API 地址：file:// 双击打开时使用注入的绝对地址（配合服务器 CORS），http 模式同源相对路径。 */
+function apiUrl(path) {
+  if (location.protocol === "file:" && window.LEAVES_API_BASE) {
+    return window.LEAVES_API_BASE + path;
+  }
+  return path;
+}
+
 /** 启动时用服务器文件数据校准（本地文件是最终权威，浏览器清缓存/换环境也不丢数据）。 */
 function syncTripsFromServer() {
-  fetch("/api/data/trips")
+  fetch(apiUrl("/api/data/trips"))
     .then((resp) => (resp.ok ? resp.json() : null))
     .then((serverTrips) => {
-      if (!Array.isArray(serverTrips) || !serverTrips.length) return;
+      // 204（无文件）→ null 跳过；200 → 覆盖（空数组表示用户删光了，同样尊重）
+      if (!Array.isArray(serverTrips)) return;
       trips = serverTrips;
       selectedTripId = trips[0]?.id;
       editingTripId = null;
@@ -360,10 +457,10 @@ function persistTrips() {
   persistTripsToServer();
 }
 
-/** 行程写入本地文件（fire-and-forget，离线/file:// 打开时静默失败）。 */
+/** 行程写入本地文件（fire-and-forget，离线时静默失败）。 */
 function persistTripsToServer() {
   try {
-    fetch("/api/data/trips", {
+    fetch(apiUrl("/api/data/trips"), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(trips)
@@ -450,8 +547,8 @@ function normalizePlace(value) {
 }
 
 function estimateDistance(origin, destination) {
-  const from = places[origin];
-  const to = places[destination];
+  const from = resolvePlace(origin);
+  const to = resolvePlace(destination);
   if (!from || !to) return 0;
   return Math.round(haversineKm(from, to));
 }
@@ -586,8 +683,8 @@ function getRoutePoints(trip) {
     return routeNames.map((name) => places[name]).filter(Boolean);
   }
 
-  const from = places[trip.origin];
-  const to = places[trip.destination];
+  const from = resolvePlace(trip.origin);
+  const to = resolvePlace(trip.destination);
   if (!from || !to) return [];
 
   if (trip.mode === "flight") return createFlightArc(from, to);
@@ -749,7 +846,7 @@ async function upgradeEditStationsToSelect(trip) {
   if (trip.origin === "待确认" || trip.destination === "待确认") return;
 
   try {
-    const response = await fetch("/api/12306/train-route", {
+    const response = await fetch(apiUrl("/api/12306/train-route"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -882,21 +979,35 @@ async function handleRailStationSelection(tripId) {
   await openStationSelector(tripId);
 }
 
+/** 日期加减（YYYY-MM-DD）。 */
+function addDays(dateStr, days) {
+  const [y, m, d] = String(dateStr).split("-").map(Number);
+  const dt = new Date(y, m - 1, d + days);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+}
+
 /** 在 Hero 卡片内查询车次全部经停站，并让用户选择上车站与到达站。 */
-async function openStationSelector(tripId) {
+async function openStationSelector(tripId, options = {}) {
   const trip = trips.find((item) => item.id === tripId);
   if (!trip) return;
 
-  // 首次打开时渲染面板框架；区间修正重试时仅刷新列表区
+  // 首次打开时渲染面板框架（含查询日期选择器）；重试时仅刷新列表区
   if (!heroOverlay.querySelector(".station-panel")) {
+    // 查询日期默认今天；登记日期是历史（过去行程）时也按今天查询
+    const queryDefault = trip.date >= localToday() ? trip.date : localToday();
     heroOverlay.innerHTML = `
       <div class="ticket-panel station-panel">
         <div class="ticket-panel-head">
           <div>
             <p class="ticket-title">${escapeHtml(trip.title)} 站点选择</p>
-            <p class="ticket-sub">${escapeHtml(trip.date)} · 请选择上车站与到达站</p>
+            <p class="ticket-sub" id="panelStatus">正在自动查询车次信息…</p>
           </div>
           <button class="ghost-button small" data-action="skip" type="button">跳过</button>
+        </div>
+        <div class="station-date">
+          <label class="edit-field"><span>查询日期</span><input id="panelDate" type="date" min="${localToday()}" value="${escapeHtml(queryDefault)}"></label>
+          <p class="ticket-sub" id="dateHint"></p>
         </div>
         <div class="station-list"></div>
       </div>
@@ -905,42 +1016,82 @@ async function openStationSelector(tripId) {
     heroOverlay.querySelector('[data-action="skip"]').addEventListener("click", () => {
       autoCompleteRailTrip(tripId);
     });
+
+    // 用户改查询日期 → 用新日期重新查询（不再自动切明天）
+    heroOverlay.querySelector("#panelDate").addEventListener("change", () => {
+      openStationSelector(tripId, { autoTomorrow: false });
+    });
   }
 
   const listEl = heroOverlay.querySelector(".station-list");
+  const statusEl = heroOverlay.querySelector("#panelStatus");
+  const dateHintEl = heroOverlay.querySelector("#dateHint");
+  // 查询日期（面板选择，用于 12306 接口）；登记日期 trip.date 保持用户填写的乘车日期
+  const queryDate = heroOverlay.querySelector("#panelDate").value;
 
-  // 无有效区间：车站联想引导输入（不默认匹配）
-  if (!trip.routeUserProvided || trip.origin === "待确认" || trip.destination === "待确认") {
-    renderRouteInput(trip);
-    return;
-  }
+  listEl.innerHTML = `<p class="ticket-loading">正在查询 12306 车次信息（${escapeHtml(queryDate)}）…</p>`;
 
-  listEl.innerHTML = '<p class="ticket-loading">正在查询 12306 经停站…</p>';
-
-  try {
-    const response = await fetch("/api/12306/train-route", {
+  const tryQuery = async (date) => {
+    const response = await fetch(apiUrl("/api/12306/train-route"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         train_no: trip.title,
-        from_station: trip.origin,
-        to_station: trip.destination,
-        train_date: trip.date
+        // 纯车次号可省略区间：后端通过 search 接口自动定位始发/终到站
+        from_station: trip.origin === "待确认" ? "" : trip.origin,
+        to_station: trip.destination === "待确认" ? "" : trip.destination,
+        train_date: date
       })
     });
-    const result = await response.json();
+    return response.json();
+  };
 
-    if (!result.success || !result.stations || result.stations.length < 2) {
-      renderRouteInput(trip, result.error || "无法获取经停站信息");
+  let result;
+  try {
+    result = await tryQuery(queryDate);
+  } catch (e) {
+    renderRouteInput(trip, "网络不可用，无法查询 12306 车次信息。");
+    return;
+  }
+
+  const isSuccess = (r) => r && r.success && r.stations && r.stations.length >= 2;
+
+  // 查询失败且允许自动尝试明天（仅调整查询日期，不影响登记日期）
+  if (!isSuccess(result) && options.autoTomorrow !== false) {
+    const tomorrow = addDays(queryDate, 1);
+    statusEl.textContent = `${queryDate} 查询不到，正在自动尝试 ${tomorrow}…`;
+    listEl.innerHTML = `<p class="ticket-loading">${escapeHtml(queryDate)} 查询不到，正在自动尝试 ${escapeHtml(tomorrow)}…</p>`;
+    try {
+      const tomorrowResult = await tryQuery(tomorrow);
+      if (isSuccess(tomorrowResult)) {
+        heroOverlay.querySelector("#panelDate").value = tomorrow;
+        statusEl.textContent = "已自动切换查询日期，正在显示车次信息…";
+        dateHintEl.textContent = `提示：${queryDate} 查询不到车次，已自动切换为 ${tomorrow}（仅用于查询，不影响登记的乘车日期 ${trip.date}）。`;
+        result = tomorrowResult;
+      } else {
+        renderRouteInput(trip, result.error || "未查询到该车次信息");
+        return;
+      }
+    } catch (e) {
+      renderRouteInput(trip, "网络不可用，无法查询 12306 车次信息。");
       return;
     }
-
-    // 查询成功：记住该车次区间，下次登记直达下拉列表
-    rememberRoute(trip.title, trip.origin, trip.destination);
-    renderStationSelector(trip, result.stations);
-  } catch (e) {
-    renderRouteInput(trip, "网络不可用，无法查询 12306 经停站。");
   }
+
+  if (!isSuccess(result)) {
+    renderRouteInput(trip, result.error || "无法获取经停站信息");
+    return;
+  }
+
+  // 查询成功：纯车次号时用首末站填充行程占位，并记住区间（不修改登记日期）
+  if (trip.origin === "待确认" || trip.destination === "待确认") {
+    trip.origin = result.stations[0].station_name;
+    trip.destination = result.stations[result.stations.length - 1].station_name;
+    trip.routeUserProvided = true;
+    persistTrips();
+  }
+  rememberRoute(trip.title, trip.origin, trip.destination);
+  renderStationSelector(trip, result.stations);
 }
 
 /** 起讫区间输入表单：车站联想下拉列表（输入即查，点击选择），查询失败时也复用此表单并提示错误。 */
@@ -950,7 +1101,7 @@ function renderRouteInput(trip, errorMsg = "") {
   const prefillTo = trip.destination && trip.destination !== "待确认" ? trip.destination : "";
   listEl.innerHTML = `
     ${errorMsg ? `<p class="ticket-error">${escapeHtml(errorMsg)}</p>` : ""}
-    <p class="ticket-sub">${escapeHtml(trip.title)} 需要起讫区间才能定位车次，请输入出发站与到达站（输入时下方出现车站下拉列表）：</p>
+    <p class="ticket-sub">${escapeHtml(trip.title)} 需要起讫区间才能定位车次，请输入出发站与到达站（输入时下方出现车站下拉列表）；也可直接填写后保存为手动记录：</p>
     <div class="station-pick">
       <div class="suggest-field">
         <label class="edit-field"><span>出发</span><input id="routeFrom" placeholder="如 合肥南" autocomplete="off" value="${escapeHtml(prefillFrom)}"></label>
@@ -961,13 +1112,29 @@ function renderRouteInput(trip, errorMsg = "") {
         <div class="suggest-list" id="suggestTo" hidden></div>
       </div>
     </div>
+    <div class="station-date">
+      <label class="edit-field"><span>乘车日期</span><input id="manualDate" type="date" value="${escapeHtml(trip.date)}"></label>
+      <p class="ticket-sub">可填写历史日期（登记过往行程）。</p>
+    </div>
     <div class="edit-actions">
       <button class="primary-button" data-action="go" type="button">查询经停站</button>
+      <button class="ghost-button" data-action="save-manual" type="button">直接保存</button>
     </div>
   `;
 
   const goButton = listEl.querySelector('[data-action="go"]');
+  const saveManualButton = listEl.querySelector('[data-action="save-manual"]');
   const hintEl = listEl.querySelector(".ticket-sub");
+
+  // 读取登记日期（可填历史）
+  const syncRideDate = () => {
+    const manualDate = listEl.querySelector("#manualDate")?.value;
+    if (manualDate && manualDate !== trip.date) {
+      trip.date = manualDate;
+      persistTrips();
+    }
+  };
+
   goButton.addEventListener("click", async () => {
     const from = listEl.querySelector("#routeFrom").value.trim();
     const to = listEl.querySelector("#routeTo").value.trim();
@@ -975,11 +1142,33 @@ function renderRouteInput(trip, errorMsg = "") {
       hintEl.textContent = "请填写出发站和到达站后重试";
       return;
     }
+    syncRideDate();
     trip.origin = normalizePlace(from);
     trip.destination = normalizePlace(to);
     trip.routeUserProvided = true;
     persistTrips();
-    await openStationSelector(trip.id);
+    await openStationSelector(trip.id, { autoTomorrow: false });
+  });
+
+  // 查不到也允许手动填写保存（不依赖 12306，支持历史日期）
+  saveManualButton.addEventListener("click", () => {
+    const from = listEl.querySelector("#routeFrom").value.trim();
+    const to = listEl.querySelector("#routeTo").value.trim();
+    if (!from || !to) {
+      hintEl.textContent = "请填写出发站和到达站后重试";
+      return;
+    }
+    syncRideDate();
+    trip.origin = normalizePlace(from);
+    trip.destination = normalizePlace(to);
+    trip.routeUserProvided = true;
+    trip.status = "draft";
+    // 距离兜底：按起讫站坐标计算
+    trip.distanceKm = estimateDistance(trip.origin, trip.destination) || trip.distanceKm;
+    trip.notes = `手动登记：${trip.origin} → ${trip.destination}（${trip.date}）。`;
+    editingTripId = null;
+    persistTrips();
+    render();
   });
 
   // 车站联想下拉：输入即查（防抖），点击选项填充
@@ -1020,7 +1209,7 @@ function renderRouteInput(trip, errorMsg = "") {
       }
       timer = setTimeout(async () => {
         try {
-          const resp = await fetch(`/api/12306/search-stations?query=${encodeURIComponent(query)}&limit=8`);
+          const resp = await fetch(apiUrl(`/api/12306/search-stations?query=${encodeURIComponent(query)}&limit=8`));
           const result = await resp.json();
           renderMatches(result.success ? result.stations : []);
         } catch (e) {
@@ -1061,6 +1250,10 @@ function renderStationSelector(trip, stations) {
 
   listEl.innerHTML = `
     <p class="ticket-success">已查询到 ${escapeHtml(trip.title)} 车次信息（共 ${stations.length} 个经停站），请选择上车站与到达站：</p>
+    <div class="station-date">
+      <label class="edit-field"><span>乘车日期</span><input id="rideDate" type="date" value="${escapeHtml(trip.date)}"></label>
+      <p class="ticket-sub">登记的是乘车当天日期，可填写历史日期（如登记 8 月 2 日的行程）。</p>
+    </div>
     <div class="station-pick">
       <label class="edit-field"><span>上车</span>
         <select id="pickFrom">${options}</select>
@@ -1111,6 +1304,9 @@ function saveStationSelection(trip, stations) {
     return;
   }
 
+  const rideDate = heroOverlay.querySelector("#rideDate")?.value;
+  if (rideDate) trip.date = rideDate;
+
   const from = stations[fromIndex];
   const to = stations[toIndex];
   trip.origin = from.station_name;
@@ -1118,6 +1314,8 @@ function saveStationSelection(trip, stations) {
   if (from.start_time !== "----") trip.departureTime = from.start_time;
   if (to.arrive_time !== "----") trip.arrivalTime = to.arrive_time;
   trip.status = "completed";
+  // 距离兜底：按起讫站坐标计算直线距离（无接口数据时使用）
+  trip.distanceKm = estimateDistance(trip.origin, trip.destination) || trip.distanceKm;
   trip.notes = `已通过 12306 确认区间：${from.station_name} → ${to.station_name}。`;
   rememberRoute(trip.title, trip.origin, trip.destination);
   editingTripId = null;
@@ -1133,7 +1331,7 @@ async function autoCompleteRailTrip(tripId) {
   if (trip.origin === "待确认" || trip.destination === "待确认") return;
 
   try {
-    const response = await fetch("/api/12306/query-tickets", {
+    const response = await fetch(apiUrl("/api/12306/query-tickets"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1189,15 +1387,17 @@ async function showTicketPanel(trip) {
 
   const loadingEl = heroOverlay.querySelector(".ticket-loading");
   const listEl = heroOverlay.querySelector(".ticket-list");
+  // 余票查询用有效日期（历史登记日期时按今天查）
+  const queryDate = trip.date >= localToday() ? trip.date : localToday();
 
   try {
-    const response = await fetch("/api/12306/query-tickets", {
+    const response = await fetch(apiUrl("/api/12306/query-tickets"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         from_station: trip.origin,
         to_station: trip.destination,
-        train_date: trip.date
+        train_date: queryDate
       })
     });
     const result = await response.json();

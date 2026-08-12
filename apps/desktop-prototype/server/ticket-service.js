@@ -2,8 +2,11 @@
 // 余票 / 票价 / 车次号转换 / 经停站 / 中转换乘 / 车站搜索 / 当前时间 共 7 个能力。
 "use strict";
 
-const { HTTP_URLS, getJson, ApiError, RetryExhaustedError } = require("./12306-client");
+const { HTTP_URLS, USER_AGENT, getJson, httpGet, ApiError, RetryExhaustedError } = require("./12306-client");
 const stationService = require("./station-service");
+
+// 12306 官网搜索接口：按车次号直接定位（无需起讫区间），返回始发/终到站与官方编号
+const SEARCH_URL = "https://search.12306.cn/search/v1/train/search";
 
 // ---------- 日期校验（12306 预售期为今天到 14 天后） ----------
 
@@ -149,6 +152,32 @@ function stationSuggestions(value) {
     pinyin: s.pinyin,
     py_short: s.pyShort,
   }));
+}
+
+/** 按车次号直接定位车次：返回始发/终到站与官方编号（无需用户提供区间）。 */
+async function findTrainByCode(trainCode, trainDate) {
+  const dateCompact = String(trainDate || "").replace(/-/g, "");
+  const resp = await httpGet(SEARCH_URL, {
+    params: { keyword: trainCode, date: dateCompact },
+    headers: { Referer: "https://www.12306.cn/", "User-Agent": USER_AGENT },
+    useDefaultHeaders: false
+  });
+  let parsed;
+  try {
+    parsed = JSON.parse(resp.body);
+  } catch (e) {
+    return null;
+  }
+  if (!parsed || parsed.status !== true || !Array.isArray(parsed.data) || !parsed.data.length) return null;
+  const item = parsed.data[0];
+  if (!item || !item.from_station || !item.to_station) return null;
+  return {
+    train_no: item.train_no || item.station_train_code || trainCode,
+    train_code: item.station_train_code || trainCode,
+    from_station: item.from_station,
+    to_station: item.to_station,
+    total_num: item.total_num || 0
+  };
 }
 
 // ========== 1. 车站搜索 ==========
@@ -324,31 +353,50 @@ async function getTrainRouteStationsValidated(args) {
     const trainDate = String(args.train_date || "").trim();
 
     if (!trainNo) return err("车次编号(train_no)不能为空");
-    if (!fromStation) return err("出发站不能为空");
-    if (!toStation) return err("到达站不能为空");
     if (!trainDate) return err("出发日期不能为空");
 
     const check = validateDateNotPast(trainDate);
     if (!check.ok) return err(check.error);
 
-    const fromCode = await ensureTelecode(fromStation);
-    if (!fromCode) return err(`出发站无效或无法识别：${fromStation}`);
-    fromStation = fromCode;
+    // 用户提供区间时转三字码；纯车次号可省略区间（由 search 接口自动定位）
+    const hasUserRoute = fromStation && fromStation !== "待确认" && toStation && toStation !== "待确认";
+    let fromCode = hasUserRoute ? await ensureTelecode(fromStation) : null;
+    let toCode = hasUserRoute ? await ensureTelecode(toStation) : null;
+    if (hasUserRoute && (!fromCode || !toCode)) {
+      return err(`车站无效或无法识别：${!fromCode ? fromStation : toStation}`);
+    }
 
-    const toCode = await ensureTelecode(toStation);
-    if (!toCode) return err(`到达站无效或无法识别：${toStation}`);
-    toStation = toCode;
+    // 车次号：优先用官方搜索接口直接定位（支持无区间输入）
+    const isTrainCode = /^[A-Z]+\d+$/.test(trainNo);
+    if (isTrainCode) {
+      if (!fromCode || !toCode) {
+        const found = await findTrainByCode(trainNo, trainDate);
+        if (found && found.train_no && found.from_station && found.to_station) {
+          trainNo = found.train_no;
+          fromStation = found.from_station;
+          toStation = found.to_station;
+          fromCode = await ensureTelecode(found.from_station);
+          toCode = await ensureTelecode(found.to_station);
+        }
+      }
 
-    // 车次号（如 G1234）→ 官方列车编号（如 240000G12340）自动转换
-    if (/^[A-Z]+\d+$/.test(trainNo)) {
-      const convertResult = await getTrainNoByTrainCodeValidated({
-        train_code: trainNo,
-        from_station: fromStation,
-        to_station: toStation,
-        train_date: trainDate,
-      });
-      if (!convertResult.success) return convertResult;
-      trainNo = convertResult.train_no;
+      // 仍有区间但无官方编号：用余票接口转换
+      if (fromCode && toCode && !/^\d/.test(trainNo)) {
+        const convertResult = await getTrainNoByTrainCodeValidated({
+          train_code: trainNo,
+          from_station: fromCode,
+          to_station: toCode,
+          train_date: trainDate,
+        });
+        if (!convertResult.success) return convertResult;
+        trainNo = convertResult.train_no;
+      }
+
+      if (!fromCode || !toCode) {
+        return err(`无法定位车次 ${trainNo} 的区间信息，请补充起讫站后重试`);
+      }
+    } else if (!fromCode || !toCode) {
+      return err("使用列车编号查询时必须提供起讫站");
     }
 
     let jsonData;
@@ -593,5 +641,6 @@ module.exports = {
   queryTransferValidated,
   queryTicketPriceValidated,
   getCurrentTimeValidated,
+  findTrainByCode,
   stationService,
 };

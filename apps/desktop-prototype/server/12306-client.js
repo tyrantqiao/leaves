@@ -33,8 +33,9 @@ const HTTP_HEADERS = {
 const HTTP_TIMEOUT = 8000;
 const MAX_REDIRECTS = 5;
 
-/** 带重定向跟随、Cookie 收集、gzip 解压的 GET 请求。 */
-function httpGet(url, { headers = {}, cookies = [], params = null } = {}) {
+/** 带重定向跟随、Cookie 收集、gzip 解压的 GET 请求。
+ * useDefaultHeaders=false 时不带 12306 业务头（用于 search.12306.cn 等独立域名）。 */
+function httpGet(url, { headers = {}, cookies = [], params = null, useDefaultHeaders = true } = {}) {
   return new Promise((resolve, reject) => {
     const doRequest = (targetUrl, redirects, history) => {
       let urlObj;
@@ -51,11 +52,12 @@ function httpGet(url, { headers = {}, cookies = [], params = null } = {}) {
       }
 
       const lib = urlObj.protocol === "https:" ? https : http;
+      const mergedHeaders = useDefaultHeaders ? { ...HTTP_HEADERS, ...headers } : { ...headers };
       const req = lib.request(
         urlObj,
         {
           method: "GET",
-          headers: { ...HTTP_HEADERS, ...headers, Cookie: cookies.join("; ") },
+          headers: { ...mergedHeaders, Cookie: cookies.join("; ") },
           rejectUnauthorized: false,
         },
         (res) => {
@@ -190,6 +192,7 @@ async function getJson(operation, url, params, options = {}) {
 module.exports = {
   HTTP_URLS,
   HTTP_HEADERS,
+  USER_AGENT,
   ApiError,
   RetryExhaustedError,
   httpGet,
