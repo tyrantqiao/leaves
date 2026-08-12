@@ -510,6 +510,62 @@ button {
   color: var(--ink);
 }
 
+/* 车站联想下拉（区间输入/编辑表单共用） */
+
+.suggest-field {
+  position: relative;
+}
+
+.suggest-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 70px;
+  right: 0;
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.suggest-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  width: 100%;
+  font-size: 13px;
+}
+
+.suggest-item:hover,
+.suggest-item.active {
+  background: #2a3a43;
+}
+
+.suggest-item .suggest-sub {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* 成功提示 */
+
+.ticket-success {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid rgba(47, 185, 143, 0.4);
+  border-radius: 8px;
+  background: rgba(47, 185, 143, 0.12);
+  color: #7fd8b8;
+  font-size: 13px;
+}
+
 /* ---------- 底部面板：筛选 + 统计 + 行程条 ---------- */
 
 .bottom-panel {

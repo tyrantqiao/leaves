@@ -9,6 +9,10 @@ const root = __dirname;
 const port = Number(process.env.LEAVES_PORT || 4173);
 const host = "127.0.0.1";
 
+// 本地数据文件（行程持久化）
+const DATA_DIR = path.join(root, "data");
+const TRIPS_FILE = path.join(DATA_DIR, "trips.json");
+
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -55,6 +59,48 @@ function readJsonBody(request) {
 }
 
 async function handleApiRequest(request, response, pathname, searchParams) {
+  // 行程数据持久化：GET 读文件（无文件返回空数组），PUT 整体覆盖写入
+  if (pathname === "/api/data/trips") {
+    if (request.method === "GET") {
+      fs.readFile(TRIPS_FILE, (error, data) => {
+        if (error) {
+          sendJson(response, 200, []);
+          return;
+        }
+        response.writeHead(200, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store"
+        });
+        response.end(data);
+      });
+      return true;
+    }
+
+    if (request.method === "PUT") {
+      try {
+        const body = await readJsonBody(request);
+        if (!Array.isArray(body)) {
+          sendJson(response, 400, { success: false, error: "请求体必须是行程数组" });
+          return true;
+        }
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+        fs.writeFile(TRIPS_FILE, JSON.stringify(body, null, 2), (error) => {
+          if (error) {
+            sendJson(response, 500, { success: false, error: `写入失败: ${error.message}` });
+            return;
+          }
+          sendJson(response, 200, { success: true, saved: body.length });
+        });
+      } catch (e) {
+        sendJson(response, 400, { success: false, error: e.message });
+      }
+      return true;
+    }
+
+    sendJson(response, 405, { success: false, error: "仅支持 GET/PUT" });
+    return true;
+  }
+
   const route = API_ROUTES[pathname];
   if (!route) return false;
 

@@ -104,7 +104,7 @@ const seedTrips = [
   }
 ];
 
-let trips = loadTrips();
+let trips = loadTripsFromLocal();
 let activeFilter = "all";
 let selectedTripId = trips[0]?.id;
 let editingTripId = null;
@@ -179,6 +179,7 @@ document.querySelectorAll(".segment").forEach((button) => {
 
 initMap();
 render();
+syncTripsFromServer();
 
 // Leaflet 本地 vendor 同步加载；若失败（如文件缺失），降级到 CDN 并继续轮询
 function initMap(attempt = 0) {
@@ -327,7 +328,7 @@ function applyTileLayer(index) {
   tileSourceLabel.textContent = `底图：${source.label}`;
 }
 
-function loadTrips() {
+function loadTripsFromLocal() {
   const raw = localStorage.getItem(storageKey);
   if (!raw) return seedTrips;
 
@@ -339,8 +340,37 @@ function loadTrips() {
   }
 }
 
+/** 启动时用服务器文件数据校准（本地文件是最终权威，浏览器清缓存/换环境也不丢数据）。 */
+function syncTripsFromServer() {
+  fetch("/api/data/trips")
+    .then((resp) => (resp.ok ? resp.json() : null))
+    .then((serverTrips) => {
+      if (!Array.isArray(serverTrips) || !serverTrips.length) return;
+      trips = serverTrips;
+      selectedTripId = trips[0]?.id;
+      editingTripId = null;
+      persistTrips();
+      render();
+    })
+    .catch(() => {});
+}
+
 function persistTrips() {
   localStorage.setItem(storageKey, JSON.stringify(trips));
+  persistTripsToServer();
+}
+
+/** 行程写入本地文件（fire-and-forget，离线/file:// 打开时静默失败）。 */
+function persistTripsToServer() {
+  try {
+    fetch("/api/data/trips", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(trips)
+    }).catch(() => {});
+  } catch (e) {
+    /* 静默 */
+  }
 }
 
 function createTripDraft(rawText, date) {
@@ -355,6 +385,7 @@ function createTripDraft(rawText, date) {
     operator: mode === "flight" ? "待补全航司" : mode === "rail" ? "中国铁路" : "手动记录",
     origin: route.origin,
     destination: route.destination,
+    routeUserProvided: route.userProvided,
     date,
     departureTime: "待确认",
     arrivalTime: "待确认",
@@ -385,13 +416,15 @@ function inferRoute(text, mode) {
   if (routeMatch) {
     return {
       origin: normalizePlace(cleanPlace(routeMatch[1])),
-      destination: normalizePlace(cleanPlace(routeMatch[2]))
+      destination: normalizePlace(cleanPlace(routeMatch[2])),
+      userProvided: true
     };
   }
 
-  if (mode === "flight") return { origin: "北京", destination: "上海" };
-  if (mode === "rail") return { origin: "上海", destination: "杭州" };
-  return { origin: "杭州", destination: "上海" };
+  // 未提供区间：标记 userProvided=false，铁路登记时引导用户补充区间，不默认匹配
+  if (mode === "flight") return { origin: "北京", destination: "上海", userProvided: false };
+  if (mode === "rail") return { origin: "待确认", destination: "待确认", userProvided: false };
+  return { origin: "杭州", destination: "上海", userProvided: false };
 }
 
 function cleanPlace(value) {
@@ -702,6 +735,61 @@ function renderEditForm(trip) {
     editingTripId = null;
     renderHero();
   });
+
+  // 铁路车次：异步查询经停站，成功后把起点/终点输入切换为经停站下拉列表
+  upgradeEditStationsToSelect(trip);
+}
+
+/** 编辑表单增强：铁路车次查询到经停站后，起点/终点切换为下拉选择。 */
+async function upgradeEditStationsToSelect(trip) {
+  if (trip.mode !== "rail" || !/^[GDCZTK]\d{1,5}$/i.test(trip.title)) return;
+  const originInput = heroOverlay.querySelector("#editOrigin");
+  const destInput = heroOverlay.querySelector("#editDestination");
+  if (!originInput || !destInput) return;
+  if (trip.origin === "待确认" || trip.destination === "待确认") return;
+
+  try {
+    const response = await fetch("/api/12306/train-route", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        train_no: trip.title,
+        from_station: trip.origin,
+        to_station: trip.destination,
+        train_date: trip.date
+      })
+    });
+    const result = await response.json();
+    if (!result.success || !result.stations || result.stations.length < 2) return;
+
+    const options = result.stations
+      .map((s, index) => {
+        const text = `${index + 1}. ${s.station_name}  ${s.arrive_time !== "----" ? `到 ${s.arrive_time}` : ""} ${s.start_time !== "----" ? `发 ${s.start_time}` : ""}`.trim();
+        return `<option value="${escapeHtml(s.station_name)}">${escapeHtml(text)}</option>`;
+      })
+      .join("");
+
+    const fromSelect = document.createElement("select");
+    fromSelect.id = "editOrigin";
+    fromSelect.innerHTML = options;
+    const fromIndex = result.stations.findIndex((s) => s.station_name === trip.origin);
+    fromSelect.value = fromIndex >= 0 ? result.stations[fromIndex].station_name : result.stations[0].station_name;
+    originInput.replaceWith(fromSelect);
+
+    const destSelect = document.createElement("select");
+    destSelect.id = "editDestination";
+    destSelect.innerHTML = options;
+    const toIndex = result.stations.findIndex((s) => s.station_name === trip.destination);
+    destSelect.value = toIndex >= 0 ? result.stations[toIndex].station_name : result.stations[result.stations.length - 1].station_name;
+    destInput.replaceWith(destSelect);
+
+    const successHint = document.createElement("p");
+    successHint.className = "ticket-success";
+    successHint.textContent = `已查询到 ${trip.title} 车次信息（${result.stations.length} 站），起点/终点已切换为经停站下拉选择。`;
+    heroOverlay.querySelector("#editForm h3").after(successHint);
+  } catch (e) {
+    /* 查询失败保持文本输入 */
+  }
 }
 
 function editField(id, label, controlHtml) {
@@ -724,10 +812,14 @@ function saveTripEdit(tripId) {
   const trip = trips.find((item) => item.id === tripId);
   if (!trip) return;
 
+  // 起点/终点控件可能是文本输入（普通行程）或经停站下拉（铁路已查询到车次），取值方式一致
+  const originEl = heroOverlay.querySelector("#editOrigin");
+  const destEl = heroOverlay.querySelector("#editDestination");
+
   trip.mode = heroOverlay.querySelector("#editMode").value;
   trip.title = heroOverlay.querySelector("#editTitle").value.trim() || trip.title;
-  trip.origin = normalizePlace(heroOverlay.querySelector("#editOrigin").value.trim()) || trip.origin;
-  trip.destination = normalizePlace(heroOverlay.querySelector("#editDestination").value.trim()) || trip.destination;
+  trip.origin = originEl.tagName === "SELECT" ? originEl.value : normalizePlace(originEl.value.trim()) || trip.origin;
+  trip.destination = destEl.tagName === "SELECT" ? destEl.value : normalizePlace(destEl.value.trim()) || trip.destination;
   trip.date = heroOverlay.querySelector("#editDate").value || trip.date;
   trip.departureTime = heroOverlay.querySelector("#editDeparture").value.trim() || "待确认";
   trip.arrivalTime = heroOverlay.querySelector("#editArrival").value.trim() || "待确认";
@@ -743,15 +835,50 @@ function saveTripEdit(tripId) {
 
 // ---------- 12306 集成：车次经停站选择与自动补全 ----------
 
-/** 登记铁路车次后：带起讫区间时弹出经停站选择器；否则退回自动补全。 */
+// 车次区间记忆：记住每个车次成功确认过的起讫区间，下次登记直接自动查询
+const routeMemoryKey = "leaves.prototype.routes";
+
+function getRouteMemory() {
+  try {
+    return JSON.parse(localStorage.getItem(routeMemoryKey)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function rememberRoute(trainCode, from, to) {
+  const memory = getRouteMemory();
+  memory[trainCode] = `${from}|${to}`;
+  try {
+    localStorage.setItem(routeMemoryKey, JSON.stringify(memory));
+  } catch (e) {
+    /* 静默 */
+  }
+}
+
+function getRememberedRoute(trainCode) {
+  const value = getRouteMemory()[trainCode];
+  if (!value) return null;
+  const parts = value.split("|");
+  return parts.length === 2 ? parts : null;
+}
+
+/** 登记铁路车次后：优先自动查询经停站（有记忆区间/输入区间），否则车站联想引导。 */
 async function handleRailStationSelection(tripId) {
   const trip = trips.find((item) => item.id === tripId);
   if (!trip || trip.mode !== "rail") return;
   if (!/^[GDCZTK]\d{1,5}$/i.test(trip.title)) return;
-  if (trip.origin === "待确认" || trip.destination === "待确认") {
-    autoCompleteRailTrip(tripId);
-    return;
+
+  // 纯车次号：尝试用历史记忆区间自动定位车次，直达下拉列表体验
+  if (!trip.routeUserProvided) {
+    const remembered = getRememberedRoute(trip.title);
+    if (remembered) {
+      trip.origin = remembered[0];
+      trip.destination = remembered[1];
+      trip.routeUserProvided = true;
+    }
   }
+
   await openStationSelector(tripId);
 }
 
@@ -781,6 +908,13 @@ async function openStationSelector(tripId) {
   }
 
   const listEl = heroOverlay.querySelector(".station-list");
+
+  // 无有效区间：车站联想引导输入（不默认匹配）
+  if (!trip.routeUserProvided || trip.origin === "待确认" || trip.destination === "待确认") {
+    renderRouteInput(trip);
+    return;
+  }
+
   listEl.innerHTML = '<p class="ticket-loading">正在查询 12306 经停站…</p>';
 
   try {
@@ -797,48 +931,127 @@ async function openStationSelector(tripId) {
     const result = await response.json();
 
     if (!result.success || !result.stations || result.stations.length < 2) {
-      renderStationRetry(trip, result.error || "无法获取经停站信息");
+      renderRouteInput(trip, result.error || "无法获取经停站信息");
       return;
     }
 
+    // 查询成功：记住该车次区间，下次登记直达下拉列表
+    rememberRoute(trip.title, trip.origin, trip.destination);
     renderStationSelector(trip, result.stations);
   } catch (e) {
-    renderStationRetry(trip, "网络不可用，无法查询 12306 经停站。");
+    renderRouteInput(trip, "网络不可用，无法查询 12306 经停站。");
   }
 }
 
-/** 查询失败时展示区间修正表单，引导用户改正区间后重新查询。 */
-function renderStationRetry(trip, errorMsg) {
+/** 起讫区间输入表单：车站联想下拉列表（输入即查，点击选择），查询失败时也复用此表单并提示错误。 */
+function renderRouteInput(trip, errorMsg = "") {
   const listEl = heroOverlay.querySelector(".station-list");
+  const prefillFrom = trip.origin && trip.origin !== "待确认" ? trip.origin : "";
+  const prefillTo = trip.destination && trip.destination !== "待确认" ? trip.destination : "";
   listEl.innerHTML = `
-    <p class="ticket-error">${escapeHtml(errorMsg)}</p>
-    <p class="ticket-sub">该车次可能不经过 ${escapeHtml(trip.origin)} → ${escapeHtml(trip.destination)}，请修正起讫区间后重试：</p>
+    ${errorMsg ? `<p class="ticket-error">${escapeHtml(errorMsg)}</p>` : ""}
+    <p class="ticket-sub">${escapeHtml(trip.title)} 需要起讫区间才能定位车次，请输入出发站与到达站（输入时下方出现车站下拉列表）：</p>
     <div class="station-pick">
-      <label class="edit-field"><span>出发</span><input id="retryFrom" value="${escapeHtml(trip.origin)}"></label>
-      <label class="edit-field"><span>到达</span><input id="retryTo" value="${escapeHtml(trip.destination)}"></label>
+      <div class="suggest-field">
+        <label class="edit-field"><span>出发</span><input id="routeFrom" placeholder="如 合肥南" autocomplete="off" value="${escapeHtml(prefillFrom)}"></label>
+        <div class="suggest-list" id="suggestFrom" hidden></div>
+      </div>
+      <div class="suggest-field">
+        <label class="edit-field"><span>到达</span><input id="routeTo" placeholder="如 上海" autocomplete="off" value="${escapeHtml(prefillTo)}"></label>
+        <div class="suggest-list" id="suggestTo" hidden></div>
+      </div>
     </div>
     <div class="edit-actions">
-      <button class="primary-button" data-action="retry" type="button">重新查询</button>
+      <button class="primary-button" data-action="go" type="button">查询经停站</button>
     </div>
   `;
 
-  listEl.querySelector('[data-action="retry"]').addEventListener("click", async () => {
-    const from = listEl.querySelector("#retryFrom").value.trim();
-    const to = listEl.querySelector("#retryTo").value.trim();
-    if (!from || !to) return;
+  const goButton = listEl.querySelector('[data-action="go"]');
+  const hintEl = listEl.querySelector(".ticket-sub");
+  goButton.addEventListener("click", async () => {
+    const from = listEl.querySelector("#routeFrom").value.trim();
+    const to = listEl.querySelector("#routeTo").value.trim();
+    if (!from || !to) {
+      hintEl.textContent = "请填写出发站和到达站后重试";
+      return;
+    }
     trip.origin = normalizePlace(from);
     trip.destination = normalizePlace(to);
+    trip.routeUserProvided = true;
     persistTrips();
     await openStationSelector(trip.id);
   });
+
+  // 车站联想下拉：输入即查（防抖），点击选项填充
+  const attachSuggest = (inputId, listId) => {
+    const inputEl = listEl.querySelector(`#${inputId}`);
+    const listEl2 = listEl.querySelector(`#${listId}`);
+    let timer = null;
+
+    const renderMatches = (stations) => {
+      if (!stations.length) {
+        listEl2.hidden = true;
+        return;
+      }
+      listEl2.innerHTML = stations
+        .map(
+          (s) =>
+            `<button class="suggest-item" type="button" data-name="${escapeHtml(s.name)}">` +
+            `<span>${escapeHtml(s.name)}</span>` +
+            `<span class="suggest-sub">${escapeHtml(s.code)} · ${escapeHtml(s.pinyin)}</span>` +
+            `</button>`
+        )
+        .join("");
+      listEl2.hidden = false;
+      listEl2.querySelectorAll(".suggest-item").forEach((item) => {
+        item.addEventListener("click", () => {
+          inputEl.value = item.dataset.name;
+          listEl2.hidden = true;
+        });
+      });
+    };
+
+    inputEl.addEventListener("input", () => {
+      clearTimeout(timer);
+      const query = inputEl.value.trim();
+      if (query.length < 1) {
+        listEl2.hidden = true;
+        return;
+      }
+      timer = setTimeout(async () => {
+        try {
+          const resp = await fetch(`/api/12306/search-stations?query=${encodeURIComponent(query)}&limit=8`);
+          const result = await resp.json();
+          renderMatches(result.success ? result.stations : []);
+        } catch (e) {
+          listEl2.hidden = true;
+        }
+      }, 250);
+    });
+
+    inputEl.addEventListener("focus", () => {
+      if (inputEl.value.trim()) inputEl.dispatchEvent(new Event("input"));
+    });
+
+    inputEl.addEventListener("blur", () => {
+      setTimeout(() => {
+        listEl2.hidden = true;
+      }, 150);
+    });
+  };
+
+  attachSuggest("routeFrom", "suggestFrom");
+  attachSuggest("routeTo", "suggestTo");
 }
 
 /** 渲染经停站选择器：上车/到达下拉 + 区间预览 + 确认。 */
 function renderStationSelector(trip, stations) {
   const listEl = heroOverlay.querySelector(".station-list");
-  const optionText = (s) =>
-    `${s.station_name}  ${s.arrive_time !== "----" ? s.arrive_time : ""} ${s.start_time !== "----" ? s.start_time : ""}`.trim();
-  const options = stations.map((s, index) => `<option value="${index}">${escapeHtml(optionText(s))}</option>`).join("");
+  const optionText = (s, index) =>
+    `${index + 1}. ${s.station_name}  ${s.arrive_time !== "----" ? `到 ${s.arrive_time}` : ""} ${s.start_time !== "----" ? `发 ${s.start_time}` : ""}`.trim();
+  const options = stations
+    .map((s, index) => `<option value="${index}">${escapeHtml(optionText(s, index))}</option>`)
+    .join("");
 
   // 默认选中与用户输入区间匹配的站；不匹配时取首站与末站
   const fromIndex = stations.findIndex((s) => s.station_name === trip.origin);
@@ -847,6 +1060,7 @@ function renderStationSelector(trip, stations) {
   const to = toIndex >= 0 ? toIndex : stations.length - 1;
 
   listEl.innerHTML = `
+    <p class="ticket-success">已查询到 ${escapeHtml(trip.title)} 车次信息（共 ${stations.length} 个经停站），请选择上车站与到达站：</p>
     <div class="station-pick">
       <label class="edit-field"><span>上车</span>
         <select id="pickFrom">${options}</select>
@@ -905,6 +1119,7 @@ function saveStationSelection(trip, stations) {
   if (to.arrive_time !== "----") trip.arrivalTime = to.arrive_time;
   trip.status = "completed";
   trip.notes = `已通过 12306 确认区间：${from.station_name} → ${to.station_name}。`;
+  rememberRoute(trip.title, trip.origin, trip.destination);
   editingTripId = null;
   persistTrips();
   render();
