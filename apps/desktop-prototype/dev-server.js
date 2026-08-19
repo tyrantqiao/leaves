@@ -4,6 +4,7 @@ const path = require("path");
 
 const ticketService = require("./server/ticket-service");
 const stationService = require("./server/station-service");
+const flightService = require("./server/flight-service");
 
 const root = __dirname;
 const port = Number(process.env.LEAVES_PORT || 4173);
@@ -31,7 +32,8 @@ const API_ROUTES = {
   "/api/12306/query-transfer": { method: "POST", handler: ticketService.queryTransferValidated },
   "/api/12306/train-route": { method: "POST", handler: ticketService.getTrainRouteStationsValidated },
   "/api/12306/train-no": { method: "POST", handler: ticketService.getTrainNoByTrainCodeValidated },
-  "/api/12306/current-time": { method: "GET", handler: ticketService.getCurrentTimeValidated }
+  "/api/12306/current-time": { method: "GET", handler: ticketService.getCurrentTimeValidated },
+  "/api/flight/search": { method: "POST", handler: flightService.searchFlightValidated }
 };
 
 function sendJson(response, statusCode, payload) {

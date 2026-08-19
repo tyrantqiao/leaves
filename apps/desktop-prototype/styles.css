@@ -7,6 +7,7 @@
   --line: #26343b;
   --flight: #4d9bff;
   --rail: #2fb98f;
+  --ship: #a78bfa;
   --road: #e08a3c;
   --accent: #e05b4a;
   --shadow: 0 24px 50px rgba(0, 0, 0, 0.4);
@@ -81,7 +82,7 @@ button {
 
 .quick-add {
   display: grid;
-  grid-template-columns: 1fr 140px 84px;
+  grid-template-columns: 1fr 92px 140px 84px;
   gap: 8px;
   padding: 6px;
   border: 1px solid var(--line);
@@ -97,7 +98,8 @@ button {
   clip: rect(0 0 0 0);
 }
 
-.quick-add input {
+.quick-add input,
+.quick-add select {
   min-width: 0;
   height: 38px;
   border: 1px solid transparent;
@@ -107,7 +109,8 @@ button {
   color: var(--ink);
 }
 
-.quick-add input:focus {
+.quick-add input:focus,
+.quick-add select:focus {
   border-color: #4a6b78;
   outline: 0;
   background: #223038;
@@ -281,6 +284,10 @@ button {
 
 .mode-badge.rail .mode-dot {
   background: var(--rail);
+}
+
+.mode-badge.ship .mode-dot {
+  background: var(--ship);
 }
 
 .mode-badge.road .mode-dot {
@@ -668,6 +675,10 @@ button {
   border-left-color: var(--rail);
 }
 
+.trip-card.ship {
+  border-left-color: var(--ship);
+}
+
 .trip-card.road {
   border-left-color: var(--road);
 }
@@ -675,6 +686,23 @@ button {
 .trip-card.active {
   border-color: #5a7d8c;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+/* 选中态保留左侧模式色（active 的 border-color 会覆盖全边框） */
+.trip-card.active.flight {
+  border-left-color: var(--flight);
+}
+
+.trip-card.active.rail {
+  border-left-color: var(--rail);
+}
+
+.trip-card.active.ship {
+  border-left-color: var(--ship);
+}
+
+.trip-card.active.road {
+  border-left-color: var(--road);
 }
 
 .trip-title {

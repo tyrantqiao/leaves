@@ -21,6 +21,14 @@
         <form id="quickAddForm" class="quick-add" aria-label="快速登记">
           <label class="input-label" for="tripInput">行程输入</label>
           <input id="tripInput" name="tripInput" autocomplete="off" placeholder="输入航班号 / 车次号 / 路线，如 CA1234、G1234、上海虹桥 到 杭州东">
+          <label class="input-label" for="tripMode">交通方式</label>
+          <select id="tripMode" name="tripMode" title="交通方式（默认自动识别）">
+            <option value="auto" selected>自动</option>
+            <option value="flight">航班</option>
+            <option value="rail">铁路</option>
+            <option value="ship">轮船</option>
+            <option value="road">道路</option>
+          </select>
           <label class="input-label" for="tripDate">日期</label>
           <input id="tripDate" name="tripDate" type="date">
           <button class="primary-button" type="submit">登记</button>
@@ -49,6 +57,7 @@
               <button class="segment active" data-filter="all" type="button">全部</button>
               <button class="segment" data-filter="flight" type="button">飞行</button>
               <button class="segment" data-filter="rail" type="button">铁路</button>
+              <button class="segment" data-filter="ship" type="button">轮船</button>
               <button class="segment" data-filter="road" type="button">道路</button>
             </div>
             <span id="tileSourceLabel" class="tile-source"></span>
