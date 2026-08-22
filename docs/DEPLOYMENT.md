@@ -26,7 +26,8 @@ leaves.tyrantqiao.com  A  183.192.47.155
 ```bash
 sudo mkdir -p /opt/leaves/current /opt/leaves/shared/data
 sudo chown -R "$USER":"$USER" /opt/leaves
-git clone https://github.com/tyrantqiao/leaves.git /opt/leaves/current
+git clone --branch codex/initial-mvp-scaffold --single-branch \
+  https://github.com/tyrantqiao/leaves.git /opt/leaves/current
 cd /opt/leaves/current
 npm ci --omit=dev
 ```
@@ -99,14 +100,25 @@ cp /opt/leaves/shared/data/trips.json \
 
 ```bash
 cd /opt/leaves/current
-git pull --ff-only origin main
+git pull --ff-only origin codex/initial-mvp-scaffold
 npm ci --omit=dev
 pm2 restart leaves --update-env
 pm2 status
 pm2 logs leaves --lines 100
 ```
 
-如果远端默认分支不是 `main`，将命令中的分支替换为实际发布分支。发布前先确认工作区的行程数据位于 `/opt/leaves/shared/data`，不要放在代码目录内随版本替换。
+发布前先确认工作区的行程数据位于 `/opt/leaves/shared/data`，不要放在代码目录内随版本替换。
+
+当前服务器使用 `codex/initial-mvp-scaffold` 分支。SSH 公钥登录配置完成后，后续可以直接使用：
+
+```bash
+ssh tyrantqiao@139.196.79.30
+cd /opt/leaves/current
+git pull --ff-only origin codex/initial-mvp-scaffold
+npm ci --omit=dev
+pm2 restart leaves --update-env
+pm2 save
+```
 
 ## 7. 上线检查清单
 
