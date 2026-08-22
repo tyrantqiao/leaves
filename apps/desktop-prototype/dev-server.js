@@ -8,10 +8,26 @@ const flightService = require("./server/flight-service");
 
 const root = __dirname;
 const port = Number(process.env.LEAVES_PORT || 4173);
-const host = "127.0.0.1";
+const host = process.env.LEAVES_HOST || "127.0.0.1";
+const isProduction = process.env.NODE_ENV === "production";
+const readOnly = ["1", "true", "yes"].includes(
+  String(process.env.LEAVES_READ_ONLY || "").toLowerCase()
+);
+const corsOrigin = String(
+  process.env.LEAVES_CORS_ORIGIN || (isProduction ? "" : "*")
+).trim();
+const allowedCorsOrigins = new Set(
+  corsOrigin
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+);
+const maxBodyBytes = Number(process.env.LEAVES_MAX_BODY_BYTES || 2 * 1024 * 1024);
 
-// 本地数据文件（行程持久化）
-const DATA_DIR = path.join(root, "data");
+// 行程持久化目录可在服务器上指向独立的 shared/data 目录。
+const DATA_DIR = process.env.LEAVES_DATA_DIR
+  ? path.resolve(process.env.LEAVES_DATA_DIR)
+  : path.join(root, "data");
 const TRIPS_FILE = path.join(DATA_DIR, "trips.json");
 
 const contentTypes = {
@@ -39,21 +55,44 @@ const API_ROUTES = {
 function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
-    "Cache-Control": "no-store",
-    // 允许 file:// 双击打开时跨域访问本地 API（数据持久化兜底）
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
+    "Cache-Control": "no-store"
   });
   response.end(JSON.stringify(payload));
+}
+
+function setResponseHeaders(response, request) {
+  response.setHeader("X-Content-Type-Options", "nosniff");
+  response.setHeader("X-Frame-Options", "SAMEORIGIN");
+  response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  response.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+
+  if (!corsOrigin) return;
+  if (corsOrigin === "*") {
+    response.setHeader("Access-Control-Allow-Origin", "*");
+  } else if (request.headers.origin && allowedCorsOrigins.has(request.headers.origin)) {
+    response.setHeader("Access-Control-Allow-Origin", request.headers.origin);
+    response.setHeader("Vary", "Origin");
+  }
+  response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
 function readJsonBody(request) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    request.on("data", (chunk) => chunks.push(chunk));
+    let totalBytes = 0;
+    let tooLarge = false;
+    request.on("data", (chunk) => {
+      totalBytes += chunk.length;
+      if (totalBytes > maxBodyBytes) tooLarge = true;
+      if (!tooLarge) chunks.push(chunk);
+    });
     request.on("end", () => {
       try {
+        if (tooLarge) {
+          reject(new Error(`请求体不能超过 ${maxBodyBytes} 字节`));
+          return;
+        }
         const raw = Buffer.concat(chunks).toString("utf8");
         resolve(raw ? JSON.parse(raw) : {});
       } catch (e) {
@@ -68,9 +107,6 @@ async function handleApiRequest(request, response, pathname, searchParams) {
   // 跨域预检（file:// 页面跨域访问本地 API）
   if (request.method === "OPTIONS") {
     response.writeHead(204, {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
       "Cache-Control": "no-store"
     });
     response.end();
@@ -83,7 +119,6 @@ async function handleApiRequest(request, response, pathname, searchParams) {
       fs.readFile(TRIPS_FILE, (error, data) => {
         if (error) {
           response.writeHead(204, {
-            "Access-Control-Allow-Origin": "*",
             "Cache-Control": "no-store"
           });
           response.end();
@@ -91,8 +126,7 @@ async function handleApiRequest(request, response, pathname, searchParams) {
         }
         response.writeHead(200, {
           "Content-Type": "application/json; charset=utf-8",
-          "Cache-Control": "no-store",
-          "Access-Control-Allow-Origin": "*"
+          "Cache-Control": "no-store"
         });
         response.end(data);
       });
@@ -100,6 +134,10 @@ async function handleApiRequest(request, response, pathname, searchParams) {
     }
 
     if (request.method === "PUT") {
+      if (readOnly) {
+        sendJson(response, 403, { success: false, error: "当前服务处于只读演示模式" });
+        return true;
+      }
       try {
         const body = await readJsonBody(request);
         if (!Array.isArray(body)) {
@@ -164,6 +202,7 @@ async function handleApiRequest(request, response, pathname, searchParams) {
 stationService.loadStations();
 
 const server = http.createServer(async (request, response) => {
+  setResponseHeaders(response, request);
   const requestUrl = new URL(request.url, `http://${host}:${port}`);
   const pathname = requestUrl.pathname === "/" ? "/index.html" : requestUrl.pathname;
 
@@ -177,7 +216,8 @@ const server = http.createServer(async (request, response) => {
 
   const filePath = path.normalize(path.join(root, decodeURIComponent(pathname)));
 
-  if (!filePath.startsWith(root)) {
+  const rootPrefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+  if (filePath !== root && !filePath.startsWith(rootPrefix)) {
     response.writeHead(403);
     response.end("Forbidden");
     return;
@@ -216,5 +256,9 @@ const server = http.createServer(async (request, response) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`Leaves prototype running at http://${host}:${port}`);
+  console.log(
+    `Leaves prototype running at http://${host}:${port} (${isProduction ? "production" : "development"}, ${
+      readOnly ? "read-only" : "writable"
+    })`
+  );
 });
