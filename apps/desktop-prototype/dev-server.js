@@ -5,6 +5,7 @@ const path = require("path");
 const ticketService = require("./server/ticket-service");
 const stationService = require("./server/station-service");
 const flightService = require("./server/flight-service");
+const { createAuthService } = require("./server/auth-service");
 
 const root = __dirname;
 const port = Number(process.env.LEAVES_PORT || 4173);
@@ -28,7 +29,12 @@ const maxBodyBytes = Number(process.env.LEAVES_MAX_BODY_BYTES || 2 * 1024 * 1024
 const DATA_DIR = process.env.LEAVES_DATA_DIR
   ? path.resolve(process.env.LEAVES_DATA_DIR)
   : path.join(root, "data");
-const TRIPS_FILE = path.join(DATA_DIR, "trips.json");
+const authService = createAuthService({
+  dataDir: DATA_DIR,
+  isProduction,
+  maxUsers: Number(process.env.LEAVES_MAX_USERS || 5),
+  sessionDays: Number(process.env.LEAVES_SESSION_DAYS || 30)
+});
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -68,10 +74,17 @@ function setResponseHeaders(response, request) {
 
   if (!corsOrigin) return;
   if (corsOrigin === "*") {
-    response.setHeader("Access-Control-Allow-Origin", "*");
+    if (request.headers.origin) {
+      response.setHeader("Access-Control-Allow-Origin", request.headers.origin);
+      response.setHeader("Vary", "Origin");
+      response.setHeader("Access-Control-Allow-Credentials", "true");
+    } else {
+      response.setHeader("Access-Control-Allow-Origin", "*");
+    }
   } else if (request.headers.origin && allowedCorsOrigins.has(request.headers.origin)) {
     response.setHeader("Access-Control-Allow-Origin", request.headers.origin);
     response.setHeader("Vary", "Origin");
+    response.setHeader("Access-Control-Allow-Credentials", "true");
   }
   response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -103,6 +116,59 @@ function readJsonBody(request) {
   });
 }
 
+function tripsFileForUser(user) {
+  return path.join(DATA_DIR, "users", `${user.id}.trips.json`);
+}
+
+async function handleAuthRequest(request, response, pathname) {
+  if (pathname === "/api/auth/me") {
+    if (request.method !== "GET") {
+      sendJson(response, 405, { success: false, error: "仅支持 GET 请求" });
+      return true;
+    }
+    const user = authService.currentUser(request);
+    if (!user) {
+      response.setHeader("Set-Cookie", authService.clearCookie());
+      sendJson(response, 401, { success: false, authenticated: false, error: "请先登录" });
+      return true;
+    }
+    sendJson(response, 200, { success: true, authenticated: true, user });
+    return true;
+  }
+
+  if (pathname === "/api/auth/register" || pathname === "/api/auth/login") {
+    if (request.method !== "POST") {
+      sendJson(response, 405, { success: false, error: "仅支持 POST 请求" });
+      return true;
+    }
+    try {
+      const body = await readJsonBody(request);
+      const result =
+        pathname === "/api/auth/register"
+          ? await authService.register(body.username, body.password)
+          : await authService.login(body.username, body.password);
+      if (result.cookie) response.setHeader("Set-Cookie", result.cookie);
+      sendJson(response, result.status, result.payload);
+    } catch (e) {
+      sendJson(response, 400, { success: false, error: e.message });
+    }
+    return true;
+  }
+
+  if (pathname === "/api/auth/logout") {
+    if (request.method !== "POST") {
+      sendJson(response, 405, { success: false, error: "仅支持 POST 请求" });
+      return true;
+    }
+    const result = authService.logout(request);
+    response.setHeader("Set-Cookie", result.cookie);
+    sendJson(response, result.status, result.payload);
+    return true;
+  }
+
+  return false;
+}
+
 async function handleApiRequest(request, response, pathname, searchParams) {
   // 跨域预检（file:// 页面跨域访问本地 API）
   if (request.method === "OPTIONS") {
@@ -113,15 +179,24 @@ async function handleApiRequest(request, response, pathname, searchParams) {
     return true;
   }
 
-  // 行程数据持久化：GET 读文件（无文件返回 204），PUT 整体覆盖写入
+  if (pathname.startsWith("/api/auth/")) {
+    return handleAuthRequest(request, response, pathname);
+  }
+
+  // 行程数据持久化：登录后按用户读写自己的文件，避免账号之间共享同一份 trips.json
   if (pathname === "/api/data/trips") {
+    const user = authService.currentUser(request);
+    if (!user) {
+      response.setHeader("Set-Cookie", authService.clearCookie());
+      sendJson(response, 401, { success: false, error: "请先登录后再访问行程数据" });
+      return true;
+    }
+    const tripsFile = tripsFileForUser(user);
+
     if (request.method === "GET") {
-      fs.readFile(TRIPS_FILE, (error, data) => {
+      fs.readFile(tripsFile, (error, data) => {
         if (error) {
-          response.writeHead(204, {
-            "Cache-Control": "no-store"
-          });
-          response.end();
+          sendJson(response, 200, []);
           return;
         }
         response.writeHead(200, {
@@ -144,8 +219,8 @@ async function handleApiRequest(request, response, pathname, searchParams) {
           sendJson(response, 400, { success: false, error: "请求体必须是行程数组" });
           return true;
         }
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-        fs.writeFile(TRIPS_FILE, JSON.stringify(body, null, 2), (error) => {
+        fs.mkdirSync(path.dirname(tripsFile), { recursive: true });
+        fs.writeFile(tripsFile, JSON.stringify(body, null, 2), (error) => {
           if (error) {
             sendJson(response, 500, { success: false, error: `写入失败: ${error.message}` });
             return;

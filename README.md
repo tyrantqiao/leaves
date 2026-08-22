@@ -9,7 +9,8 @@ Leaves 是一个 Windows 优先的个人出行记录软件。它的目标不是�
 - ✅ 快速登记：输入航班号、铁路车次号、起终点，自动识别交通方式并生成草稿（票据截图 OCR 待 Phase 2）。
 - ✅ 行程时间线：按日期回看航班、铁路、道路记录，支持方式筛选。
 - ✅ 地图回顾：Leaflet 真实地图上显示航线弧线、铁路/公路线、城市点位，支持单程聚焦与重置视角。
-- ✅ 本地优先：localStorage 本地持久化，离线可查历史行程（正式版替换为 SQLite）。
+- ✅ 账号入口：进入 Leaves 前先登录或注册，行程按账号隔离保存。
+- ✅ 本地优先：账号维度 localStorage 缓存 + 本地服务文件持久化（正式版替换为 SQLite）。
 - ✅ 行程管理：新增、内联编辑、删除行程，JSON 一键导入导出。
 - ✅ 12306 铁路查询：登记车次后自动补全真实发到时刻；铁路行程支持实时余票查询（逻辑移植自 mcp-server-12306）。
 - ⏳ 数据源可替换：通过 provider adapter 接入航班、铁路、地图、OCR 等能力。
@@ -51,7 +52,7 @@ http://127.0.0.1:4173
 $env:LEAVES_PORT=8080; npm start
 ```
 
-也可以不启动服务器，在 Windows 上直接双击打开：
+账号登录、行程持久化、12306 查询都依赖本地服务。直接双击 HTML 只适合静态资源调试，无法完成登录：
 
 ```text
 apps/desktop-prototype/index.html
@@ -101,7 +102,7 @@ apps/desktop-prototype/index.html
 - **自动补全**：无法查询经停站时（离线/车次不在区间内），自动补全真实发到时刻作为兜底。
 - **实时余票**：铁路行程 Hero 卡片上的“实时余票”按钮，展示该线路当日全部车次与座席余票，本车次高亮。
 - **日期限制**：登记日期只能选择今天及以后（12306 预售期限制，后端同步校验）。
-- **本地持久化**：行程数据双写保存——浏览器 localStorage（离线/双击打开兜底）+ 本地文件 `apps/desktop-prototype/data/trips.json`（通过 `/api/data/trips` 读写，重启/换浏览器不丢）。
+- **账号与本地持久化**：进入应用前先通过 `/api/auth/register` 或 `/api/auth/login` 建立 session；行程数据双写保存到当前账号自己的浏览器 localStorage key 和本地文件 `apps/desktop-prototype/data/users/<user-id>.trips.json`（通过 `/api/data/trips` 读写，重启/换浏览器不丢）。
 
 实现要点（移植自 [mcp-server-12306](https://github.com/drfccv/mcp-server-12306)，MIT License）：浏览器模拟请求头 + init 会话 Cookie 维持 + 网络重试 + 反爬拦截检测 + 车站名↔三字码转换（内置 3400+ 车站数据）。车站数据与查询均为本地代理完成，断网时自动降级为纯手工登记，不影响离线使用。
 

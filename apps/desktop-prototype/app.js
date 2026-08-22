@@ -193,10 +193,12 @@ const seedTrips = [
   }
 ];
 
-let trips = loadTripsFromLocal();
+let currentUser = null;
+let trips = [];
 let activeFilter = "all";
-let selectedTripId = trips[0]?.id;
+let selectedTripId = null;
 let editingTripId = null;
+let appStarted = false;
 let map;
 let tileLayer;
 let baseGeoJsonLayer;
@@ -220,6 +222,19 @@ const tileSourceLabel = document.querySelector("#tileSourceLabel");
 const exportButtons = document.querySelectorAll(".export-json");
 const importButtons = document.querySelectorAll(".import-json");
 const importFile = document.querySelector("#importFile");
+const authGate = document.querySelector("#authGate");
+const appShell = document.querySelector("#appShell");
+const authForm = document.querySelector("#authForm");
+const authTitle = document.querySelector("#authTitle");
+const authUsername = document.querySelector("#authUsername");
+const authPassword = document.querySelector("#authPassword");
+const authPasswordConfirm = document.querySelector("#authPasswordConfirm");
+const authConfirmRow = document.querySelector("#authConfirmRow");
+const authSubmit = document.querySelector("#authSubmit");
+const authMessage = document.querySelector("#authMessage");
+const currentUserName = document.querySelector("#currentUserName");
+const logoutButton = document.querySelector("#logoutButton");
+let authMode = "login";
 
 // 登记日期：默认今天。登记的是过往行程，允许选择任意历史日期；查询车次时另用查询日期（今天~+14天）
 function localToday() {
@@ -230,8 +245,24 @@ function localToday() {
 
 dateInput.value = localToday();
 
+document.querySelectorAll("[data-auth-mode]").forEach((button) => {
+  button.addEventListener("click", () => {
+    setAuthMode(button.dataset.authMode);
+  });
+});
+
+authForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  submitAuthForm();
+});
+
+logoutButton.addEventListener("click", () => {
+  logout();
+});
+
 form.addEventListener("submit", (event) => {
   event.preventDefault();
+  if (!currentUser) return;
   const rawText = input.value.trim();
   if (!rawText) return;
 
@@ -268,9 +299,146 @@ document.querySelectorAll(".segment").forEach((button) => {
   });
 });
 
-initMap();
-render();
-syncTripsFromServer();
+setAuthMode("login");
+checkExistingSession();
+
+function setAuthMode(mode) {
+  authMode = mode === "register" ? "register" : "login";
+  document.querySelectorAll("[data-auth-mode]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.authMode === authMode);
+  });
+  authTitle.textContent = authMode === "register" ? "注册 Leaves" : "登录 Leaves";
+  authSubmit.textContent = authMode === "register" ? "注册并进入" : "登录";
+  authConfirmRow.hidden = authMode !== "register";
+  authPassword.autocomplete = authMode === "register" ? "new-password" : "current-password";
+  authPasswordConfirm.required = authMode === "register";
+  authPasswordConfirm.value = "";
+  setAuthMessage(authMode === "register" ? "密码至少 10 位，账号上限为 5 个。" : "");
+}
+
+function setAuthMessage(message, type = "") {
+  authMessage.textContent = message || "";
+  authMessage.className = `auth-message${type ? ` ${type}` : ""}`;
+}
+
+async function checkExistingSession() {
+  authGate.hidden = false;
+  appShell.hidden = true;
+  setAuthMessage("正在检查登录状态...");
+
+  try {
+    const response = await apiFetch("/api/auth/me");
+    const payload = await readResponseJson(response);
+    if (response.ok && payload.user) {
+      enterApp(payload.user);
+      return;
+    }
+    setAuthMessage("请先登录或注册。");
+  } catch (e) {
+    setAuthMessage("无法连接 Leaves 服务，请通过 npm start 启动后再登录。", "error");
+  }
+}
+
+async function submitAuthForm() {
+  const username = authUsername.value.trim();
+  const password = authPassword.value;
+  const passwordConfirm = authPasswordConfirm.value;
+
+  if (authMode === "register" && password !== passwordConfirm) {
+    setAuthMessage("两次输入的密码不一致。", "error");
+    return;
+  }
+
+  authSubmit.disabled = true;
+  setAuthMessage(authMode === "register" ? "正在注册..." : "正在登录...");
+
+  try {
+    const response = await apiFetch(`/api/auth/${authMode}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    const payload = await readResponseJson(response);
+    if (!response.ok || !payload.user) {
+      setAuthMessage(payload.error || "账号操作失败，请稍后重试。", "error");
+      return;
+    }
+    setAuthMessage("已登录。", "success");
+    enterApp(payload.user);
+  } catch (e) {
+    setAuthMessage("无法连接 Leaves 服务，请确认本地服务正在运行。", "error");
+  } finally {
+    authSubmit.disabled = false;
+  }
+}
+
+function enterApp(user) {
+  currentUser = user;
+  currentUserName.textContent = user.username;
+  authGate.hidden = true;
+  appShell.hidden = false;
+  authPassword.value = "";
+  authPasswordConfirm.value = "";
+
+  activeFilter = "all";
+  editingTripId = null;
+  document.querySelectorAll(".segment").forEach((button) => {
+    button.classList.toggle("active", button.dataset.filter === "all");
+  });
+
+  trips = loadTripsFromLocal();
+  selectedTripId = trips[0]?.id || null;
+
+  if (!appStarted) {
+    appStarted = true;
+    initMap();
+  }
+  render();
+  syncTripsFromServer();
+  setTimeout(() => {
+    if (map) map.invalidateSize();
+  }, 0);
+}
+
+async function logout() {
+  try {
+    await apiFetch("/api/auth/logout", { method: "POST" });
+  } catch (e) {
+    /* 本地仍退出 */
+  }
+
+  currentUser = null;
+  trips = [];
+  selectedTripId = null;
+  editingTripId = null;
+  currentUserName.textContent = "";
+  if (routeLayer) routeLayer.clearLayers();
+  if (markerLayer) markerLayer.clearLayers();
+  tripStrip.innerHTML = "";
+  heroOverlay.innerHTML = "";
+  statsLine.textContent = "";
+  appShell.hidden = true;
+  authGate.hidden = false;
+  setAuthMode("login");
+  setAuthMessage("已退出登录。", "success");
+  authUsername.focus();
+}
+
+function handleAuthExpired() {
+  currentUser = null;
+  appShell.hidden = true;
+  authGate.hidden = false;
+  setAuthMode("login");
+  setAuthMessage("登录状态已过期，请重新登录。", "error");
+}
+
+async function readResponseJson(response) {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
+}
 
 // Leaflet 本地 vendor 同步加载；若失败（如文件缺失），降级到 CDN 并继续轮询
 function initMap(attempt = 0) {
@@ -420,16 +588,21 @@ function applyTileLayer(index) {
 }
 
 function loadTripsFromLocal() {
-  const raw = localStorage.getItem(storageKey);
-  if (!raw) return seedTrips;
+  if (!currentUser) return [];
+  const raw = localStorage.getItem(scopedStorageKey(storageKey));
+  if (!raw) return [];
 
   try {
     const parsed = JSON.parse(raw);
     // 空数组也尊重（用户删光了行程后不复活 demo 数据）
-    return Array.isArray(parsed) ? parsed : seedTrips;
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return seedTrips;
+    return [];
   }
+}
+
+function scopedStorageKey(key) {
+  return currentUser ? `${key}.${currentUser.id}` : key;
 }
 
 /** 本地 API 地址：file:// 双击打开时使用注入的绝对地址（配合服务器 CORS），http 模式同源相对路径。 */
@@ -440,12 +613,26 @@ function apiUrl(path) {
   return path;
 }
 
+function apiFetch(path, options = {}) {
+  return fetch(apiUrl(path), {
+    credentials: "include",
+    ...options
+  });
+}
+
 /** 启动时用服务器文件数据校准（本地文件是最终权威，浏览器清缓存/换环境也不丢数据）。 */
 function syncTripsFromServer() {
-  fetch(apiUrl("/api/data/trips"))
-    .then((resp) => (resp.ok ? resp.json() : null))
+  if (!currentUser) return;
+  apiFetch("/api/data/trips")
+    .then((resp) => {
+      if (resp.status === 401) {
+        handleAuthExpired();
+        return null;
+      }
+      return resp.ok ? resp.json() : null;
+    })
     .then((serverTrips) => {
-      // 204（无文件）→ null 跳过；200 → 覆盖（空数组表示用户删光了，同样尊重）
+      // 服务端文件是最终权威；空数组表示该账号暂无行程，同样尊重。
       if (!Array.isArray(serverTrips)) return;
       trips = serverTrips;
       selectedTripId = trips[0]?.id;
@@ -457,18 +644,24 @@ function syncTripsFromServer() {
 }
 
 function persistTrips() {
-  localStorage.setItem(storageKey, JSON.stringify(trips));
+  if (!currentUser) return;
+  localStorage.setItem(scopedStorageKey(storageKey), JSON.stringify(trips));
   persistTripsToServer();
 }
 
 /** 行程写入本地文件（fire-and-forget，离线时静默失败）。 */
 function persistTripsToServer() {
+  if (!currentUser) return;
   try {
-    fetch(apiUrl("/api/data/trips"), {
+    apiFetch("/api/data/trips", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(trips)
-    }).catch(() => {});
+    })
+      .then((response) => {
+        if (response.status === 401) handleAuthExpired();
+      })
+      .catch(() => {});
   } catch (e) {
     /* 静默 */
   }
@@ -946,7 +1139,7 @@ const routeMemoryKey = "leaves.prototype.routes";
 
 function getRouteMemory() {
   try {
-    return JSON.parse(localStorage.getItem(routeMemoryKey)) || {};
+    return JSON.parse(localStorage.getItem(scopedStorageKey(routeMemoryKey))) || {};
   } catch {
     return {};
   }
@@ -956,7 +1149,7 @@ function rememberRoute(trainCode, from, to) {
   const memory = getRouteMemory();
   memory[trainCode] = `${from}|${to}`;
   try {
-    localStorage.setItem(routeMemoryKey, JSON.stringify(memory));
+    localStorage.setItem(scopedStorageKey(routeMemoryKey), JSON.stringify(memory));
   } catch (e) {
     /* 静默 */
   }
@@ -1623,6 +1816,7 @@ function deleteTrip(tripId) {
 }
 
 function exportTrips() {
+  if (!currentUser) return;
   const payload = JSON.stringify({ app: "leaves", version: 1, exportedAt: new Date().toISOString(), trips }, null, 2);
   const blob = new Blob([payload], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -1634,6 +1828,7 @@ function exportTrips() {
 }
 
 function importTrips(file) {
+  if (!currentUser) return;
   if (!file) return;
 
   const reader = new FileReader();
