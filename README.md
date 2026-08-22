@@ -22,6 +22,7 @@ Leaves 是一个 Windows 优先的个人出行记录软件。它的目标不是�
 - [开发路线图](docs/ROADMAP.md)
 - [服务器部署与域名绑定可行性报告](docs/DEPLOYMENT_FEASIBILITY.md)
 - [服务器部署手册](docs/DEPLOYMENT.md)
+- [账号与轻量数据库方案](docs/AUTH_SQLITE_PLAN.md)
 - [桌面交互原型](apps/desktop-prototype/index.html)
 
 ## 一键安装与启动

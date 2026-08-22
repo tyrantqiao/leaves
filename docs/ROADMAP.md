@@ -21,6 +21,7 @@
 - ⏳ 初始化 Tauri + React + TypeScript 项目。
 - ✅ 建立基础 UI shell：侧栏、顶部快速登记、地图区、时间线、详情栏（原型已验证，待迁移到 React）。
 - ⏳ 接入 SQLite（原型暂用 localStorage 替代）。
+- ⏳ 增加轻量账号体系：最多 5 个账号、注册登录、密码哈希、按账号隔离行程数据。
 - ✅ 实现 trip/segment/place/geometry 的本地 CRUD（原型层：新增、内联编辑、删除、查看已完成，存储层待替换）。
 - ✅ 支持本地导入导出 JSON。
 
@@ -78,3 +79,4 @@
 3. 初始化正式桌面项目。
 4. 迁移原型 UI 到 React。
 5. 建立 SQLite schema 和第一版 repository。
+6. 实现轻量账号体系和现有 `trips.json` 到首个账号的迁移脚本。
