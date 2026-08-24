@@ -10,6 +10,9 @@ PM2_APP="${LEAVES_PM2_APP:-leaves}"
 DATA_DIR="${LEAVES_DATA_DIR:-/opt/leaves/shared/data}"
 HEALTH_URL="${LEAVES_HEALTH_URL:-http://127.0.0.1:4173/}"
 LOCK_FILE="${LEAVES_DEPLOY_LOCK:-/tmp/leaves-deploy.lock}"
+GIT_HTTP_VERSION="${LEAVES_GIT_HTTP_VERSION:-HTTP/1.1}"
+GIT_FETCH_ATTEMPTS="${LEAVES_GIT_FETCH_ATTEMPTS:-5}"
+GIT_FETCH_RETRY_DELAY="${LEAVES_GIT_FETCH_RETRY_DELAY:-5}"
 
 log() {
   printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"
@@ -20,6 +23,27 @@ require_command() {
     printf 'Missing required command: %s\n' "$1" >&2
     exit 127
   fi
+}
+
+git_fetch_branch() {
+  refspec="+refs/heads/${BRANCH}:refs/remotes/${REMOTE}/${BRANCH}"
+  attempt=1
+
+  while [ "$attempt" -le "$GIT_FETCH_ATTEMPTS" ]; do
+    if git -c "http.version=${GIT_HTTP_VERSION}" fetch --prune "$REMOTE" "$refspec"; then
+      return 0
+    fi
+
+    status="$?"
+    if [ "$attempt" -ge "$GIT_FETCH_ATTEMPTS" ]; then
+      log "Git fetch failed after ${GIT_FETCH_ATTEMPTS} attempts"
+      return "$status"
+    fi
+
+    log "Git fetch failed on attempt ${attempt}/${GIT_FETCH_ATTEMPTS}; retrying in ${GIT_FETCH_RETRY_DELAY}s"
+    sleep "$GIT_FETCH_RETRY_DELAY"
+    attempt=$((attempt + 1))
+  done
 }
 
 deploy() {
@@ -50,7 +74,7 @@ deploy() {
   fi
 
   log "Fetching ${REMOTE}/${BRANCH}"
-  git fetch --prune "$REMOTE" "+refs/heads/${BRANCH}:refs/remotes/${REMOTE}/${BRANCH}"
+  git_fetch_branch
 
   local_ref="${REMOTE}/${BRANCH}"
   before="$(git rev-parse --short HEAD)"

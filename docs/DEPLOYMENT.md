@@ -141,6 +141,9 @@ pm2 logs leaves --lines 100
 | `LEAVES_DATA_DIR` | `/opt/leaves/shared/data` | 运行数据目录 |
 | `LEAVES_HEALTH_URL` | `http://127.0.0.1:4173/` | 发布后健康检查地址 |
 | `LEAVES_DEPLOY_LOCK` | `/tmp/leaves-deploy.lock` | 部署锁文件 |
+| `LEAVES_GIT_HTTP_VERSION` | `HTTP/1.1` | Git fetch 使用的 HTTP 版本；服务器访问 GitHub 不稳定时保持默认值 |
+| `LEAVES_GIT_FETCH_ATTEMPTS` | `5` | Git fetch 最大重试次数 |
+| `LEAVES_GIT_FETCH_RETRY_DELAY` | `5` | Git fetch 失败后的重试间隔秒数 |
 
 发布前先确认工作区的行程数据位于 `/opt/leaves/shared/data`，不要放在代码目录内随版本替换。
 
@@ -217,6 +220,9 @@ LEAVES_DEPLOY_REMOTE=origin
 LEAVES_DEPLOY_BRANCH=main
 LEAVES_DATA_DIR=/opt/leaves/shared/data
 LEAVES_HEALTH_URL=http://127.0.0.1:4173/
+LEAVES_GIT_HTTP_VERSION=HTTP/1.1
+LEAVES_GIT_FETCH_ATTEMPTS=5
+LEAVES_GIT_FETCH_RETRY_DELAY=5
 EOF
 ```
 
