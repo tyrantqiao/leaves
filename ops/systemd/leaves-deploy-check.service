@@ -1,0 +1,16 @@
+[Unit]
+Description=Check and deploy Leaves when the Git remote advances
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/opt/leaves/current
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=LEAVES_APP_DIR=/opt/leaves/current
+Environment=LEAVES_DEPLOY_REMOTE=origin
+Environment=LEAVES_DEPLOY_BRANCH=main
+Environment=LEAVES_DEPLOY_SCRIPT=/opt/leaves/current/ops/deploy/deploy.sh
+EnvironmentFile=-/etc/leaves/deploy.env
+ExecStart=/usr/bin/env bash /opt/leaves/current/ops/deploy/poll-and-deploy.sh

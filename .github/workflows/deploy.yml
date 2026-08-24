@@ -1,0 +1,86 @@
+name: Deploy Leaves
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: leaves-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy production
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      REMOTE_APP_DIR: ${{ vars.LEAVES_REMOTE_APP_DIR || '/opt/leaves/current' }}
+      REMOTE_BRANCH: ${{ vars.LEAVES_REMOTE_DEPLOY_BRANCH || 'main' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate deployment scripts
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash -n ops/deploy/deploy.sh
+          bash -n ops/deploy/poll-and-deploy.sh
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.LEAVES_DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.LEAVES_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          : "${DEPLOY_SSH_KEY:?Missing LEAVES_DEPLOY_SSH_KEY secret}"
+          : "${DEPLOY_KNOWN_HOSTS:?Missing LEAVES_DEPLOY_KNOWN_HOSTS secret}"
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/leaves_deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/leaves_deploy_key
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Deploy over SSH
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.LEAVES_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.LEAVES_DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.LEAVES_DEPLOY_PORT }}
+        run: |
+          set -Eeuo pipefail
+          : "${DEPLOY_HOST:?Missing LEAVES_DEPLOY_HOST secret}"
+          : "${DEPLOY_USER:?Missing LEAVES_DEPLOY_USER secret}"
+
+          port="${DEPLOY_PORT:-22}"
+          remote_tmp="/tmp/leaves-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.sh"
+          ssh_opts=(
+            -i "$HOME/.ssh/leaves_deploy_key"
+            -p "$port"
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+          )
+          scp_opts=(
+            -i "$HOME/.ssh/leaves_deploy_key"
+            -P "$port"
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+          )
+
+          scp "${scp_opts[@]}" ops/deploy/deploy.sh "${DEPLOY_USER}@${DEPLOY_HOST}:${remote_tmp}"
+
+          remote_command="$(printf 'LEAVES_APP_DIR=%q LEAVES_DEPLOY_BRANCH=%q bash %q; status=$?; rm -f %q; exit $status' \
+            "$REMOTE_APP_DIR" \
+            "$REMOTE_BRANCH" \
+            "$remote_tmp" \
+            "$remote_tmp")"
+
+          ssh "${ssh_opts[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "$remote_command"
