@@ -36,6 +36,9 @@ const places = {
   "上海虹桥": { lat: 31.1968, lng: 121.3260 },
   "上海南": { lat: 31.1548, lng: 121.4299 },
   "上海浦东": { lat: 31.1443, lng: 121.8083 },
+  "惠州": { lat: 23.1118, lng: 114.4168 },
+  "惠州平潭": { lat: 23.0498, lng: 114.5997 },
+  "惠州平潭机场": { lat: 23.0498, lng: 114.5997 },
   "杭州": { lat: 30.2741, lng: 120.1551 },
   "杭州东": { lat: 30.2891, lng: 120.2120 },
   "杭州南": { lat: 30.1715, lng: 120.3100 },
@@ -145,7 +148,8 @@ const knownRoutes = {
   "rail:广州:深圳": ["广州南", "虎门", "深圳北"],
   "rail:深圳:广州": ["深圳北", "虎门", "广州南"],
   "flight:北京:上海": ["北京首都", "上海虹桥"],
-  "flight:上海:北京": ["上海虹桥", "北京首都"]
+  "flight:上海:北京": ["上海虹桥", "北京首都"],
+  "flight:惠州平潭:上海浦东": ["惠州平潭", "上海浦东"]
 };
 
 const seedTrips = [
@@ -233,8 +237,19 @@ const authConfirmRow = document.querySelector("#authConfirmRow");
 const authSubmit = document.querySelector("#authSubmit");
 const authMessage = document.querySelector("#authMessage");
 const currentUserName = document.querySelector("#currentUserName");
+const userSettingsButton = document.querySelector("#userSettingsButton");
 const logoutButton = document.querySelector("#logoutButton");
+const settingsModal = document.querySelector("#settingsModal");
+const settingsClose = document.querySelector("#settingsClose");
+const openskySettingsForm = document.querySelector("#openskySettingsForm");
+const openskyClientId = document.querySelector("#openskyClientId");
+const openskyClientSecret = document.querySelector("#openskyClientSecret");
+const openskyProxyUrl = document.querySelector("#openskyProxyUrl");
+const openskyTestButton = document.querySelector("#openskyTestButton");
+const openskyClearButton = document.querySelector("#openskyClearButton");
+const settingsMessage = document.querySelector("#settingsMessage");
 let authMode = "login";
+let savedOpenSkyHasSecret = false;
 
 // 登记日期：默认今天。登记的是过往行程，允许选择任意历史日期；查询车次时另用查询日期（今天~+14天）
 function localToday() {
@@ -260,13 +275,38 @@ logoutButton.addEventListener("click", () => {
   logout();
 });
 
+userSettingsButton.addEventListener("click", () => {
+  openSettingsModal();
+});
+
+settingsClose.addEventListener("click", () => {
+  closeSettingsModal();
+});
+
+settingsModal.addEventListener("click", (event) => {
+  if (event.target === settingsModal) closeSettingsModal();
+});
+
+openskySettingsForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  saveOpenSkySettings();
+});
+
+openskyTestButton.addEventListener("click", () => {
+  testOpenSkySettings();
+});
+
+openskyClearButton.addEventListener("click", () => {
+  clearOpenSkySettings();
+});
+
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   if (!currentUser) return;
   const rawText = input.value.trim();
   if (!rawText) return;
 
-  const draft = createTripDraft(rawText, dateInput.value, modeSelect.value);
+  const draft = createTripDraft(rawText, extractTripDate(rawText) || dateInput.value, modeSelect.value);
   trips = [draft, ...trips];
   selectedTripId = draft.id;
   persistTrips();
@@ -411,7 +451,9 @@ async function logout() {
   trips = [];
   selectedTripId = null;
   editingTripId = null;
+  savedOpenSkyHasSecret = false;
   currentUserName.textContent = "";
+  settingsModal.hidden = true;
   if (routeLayer) routeLayer.clearLayers();
   if (markerLayer) markerLayer.clearLayers();
   tripStrip.innerHTML = "";
@@ -426,10 +468,149 @@ async function logout() {
 
 function handleAuthExpired() {
   currentUser = null;
+  savedOpenSkyHasSecret = false;
+  settingsModal.hidden = true;
   appShell.hidden = true;
   authGate.hidden = false;
   setAuthMode("login");
   setAuthMessage("登录状态已过期，请重新登录。", "error");
+}
+
+function setSettingsMessage(message, type = "") {
+  settingsMessage.textContent = message || "";
+  settingsMessage.className = `auth-message${type ? ` ${type}` : ""}`;
+}
+
+async function openSettingsModal() {
+  if (!currentUser) return;
+  settingsModal.hidden = false;
+  openskyClientSecret.value = "";
+  setSettingsMessage("正在加载设置...");
+  try {
+    const response = await apiFetch("/api/user/settings");
+    if (response.status === 401) {
+      handleAuthExpired();
+      return;
+    }
+    const payload = await readResponseJson(response);
+    if (!response.ok || !payload.success) {
+      setSettingsMessage(payload.error || "设置加载失败。", "error");
+      return;
+    }
+    applyOpenSkySettings(payload.settings?.opensky);
+    setSettingsMessage(savedOpenSkyHasSecret ? "OpenSky 凭证已保存。" : "");
+    openskyClientId.focus();
+  } catch (e) {
+    setSettingsMessage("无法连接本地服务。", "error");
+  }
+}
+
+function closeSettingsModal() {
+  settingsModal.hidden = true;
+  setSettingsMessage("");
+}
+
+function applyOpenSkySettings(opensky) {
+  openskyClientId.value = opensky?.clientId || "";
+  openskyClientSecret.value = "";
+  openskyProxyUrl.value = opensky?.proxyUrl || "";
+  savedOpenSkyHasSecret = Boolean(opensky?.hasClientSecret);
+  openskyClientSecret.placeholder = savedOpenSkyHasSecret ? "留空则保留已保存密钥" : "client_secret";
+}
+
+function readOpenSkySettingsForm() {
+  return {
+    clientId: openskyClientId.value.trim(),
+    clientSecret: openskyClientSecret.value.trim(),
+    proxyUrl: openskyProxyUrl.value.trim()
+  };
+}
+
+async function saveOpenSkySettings() {
+  const body = readOpenSkySettingsForm();
+  if (!body.clientId) {
+    setSettingsMessage("Client ID 不能为空。", "error");
+    return;
+  }
+  if (!body.clientSecret && !savedOpenSkyHasSecret) {
+    setSettingsMessage("Client Secret 不能为空。", "error");
+    return;
+  }
+
+  setSettingsMessage("正在保存...");
+  try {
+    const response = await apiFetch("/api/user/settings/opensky", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (response.status === 401) {
+      handleAuthExpired();
+      return;
+    }
+    const payload = await readResponseJson(response);
+    if (!response.ok || !payload.success) {
+      setSettingsMessage(payload.error || "保存失败。", "error");
+      return;
+    }
+    applyOpenSkySettings(payload.opensky);
+    setSettingsMessage("已保存 OpenSky 凭证。", "success");
+  } catch (e) {
+    setSettingsMessage("无法连接本地服务。", "error");
+  }
+}
+
+async function testOpenSkySettings() {
+  const body = readOpenSkySettingsForm();
+  if (!body.clientId && !savedOpenSkyHasSecret) {
+    setSettingsMessage("请先填写 OpenSky 凭证。", "error");
+    return;
+  }
+
+  setSettingsMessage("正在测试 OpenSky 凭证...");
+  try {
+    const response = await apiFetch("/api/user/settings/opensky/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (response.status === 401) {
+      handleAuthExpired();
+      return;
+    }
+    const payload = await readResponseJson(response);
+    if (!response.ok || !payload.success) {
+      setSettingsMessage(payload.error || "OpenSky 凭证验证失败。", "error");
+      return;
+    }
+    setSettingsMessage("OpenSky 凭证可用。", "success");
+  } catch (e) {
+    setSettingsMessage("无法连接 OpenSky 或本地服务。", "error");
+  }
+}
+
+async function clearOpenSkySettings() {
+  setSettingsMessage("正在清除...");
+  try {
+    const response = await apiFetch("/api/user/settings/opensky", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clear: true })
+    });
+    if (response.status === 401) {
+      handleAuthExpired();
+      return;
+    }
+    const payload = await readResponseJson(response);
+    if (!response.ok || !payload.success) {
+      setSettingsMessage(payload.error || "清除失败。", "error");
+      return;
+    }
+    applyOpenSkySettings(payload.opensky);
+    setSettingsMessage("OpenSky 凭证已清除。", "success");
+  } catch (e) {
+    setSettingsMessage("无法连接本地服务。", "error");
+  }
 }
 
 async function readResponseJson(response) {
@@ -672,6 +853,7 @@ function createTripDraft(rawText, date, explicitMode = "auto") {
   const mode = explicitMode !== "auto" ? explicitMode : detectMode(rawText);
   const route = inferRoute(rawText, mode);
   const serviceNumber = extractServiceNumber(rawText, mode);
+  const times = extractTimeRange(rawText);
 
   return {
     id: `trip-${Date.now()}`,
@@ -682,8 +864,8 @@ function createTripDraft(rawText, date, explicitMode = "auto") {
     destination: route.destination,
     routeUserProvided: route.userProvided,
     date,
-    departureTime: "待确认",
-    arrivalTime: "待确认",
+    departureTime: times.departureTime || "待确认",
+    arrivalTime: times.arrivalTime || "待确认",
     distanceKm: estimateDistance(route.origin, route.destination),
     status: "draft",
     notes: `由输入 "${rawText}" 生成，等待用户确认和数据源补全。`
@@ -693,7 +875,7 @@ function createTripDraft(rawText, date, explicitMode = "auto") {
 function detectMode(text) {
   const normalized = text.trim().toUpperCase();
   // 前缀匹配：支持 "CA1234 北京到上海"、"G7254 合肥南到上海" 这类带区间的车次输入
-  if (/^[A-Z]{2}\d{3,4}/.test(normalized)) return "flight";
+  if (/^[A-Z0-9]{2}\d{3,4}/.test(normalized)) return "flight";
   if (/^[GDCZTK]\d{1,5}/.test(normalized)) return "rail";
   if (/轮船|轮渡|渡轮|客轮|邮轮/.test(text)) return "ship";
   if (text.includes("打车") || text.includes("自驾") || text.includes("到") || text.includes("->")) return "road";
@@ -702,14 +884,32 @@ function detectMode(text) {
 
 function extractServiceNumber(text, mode) {
   const normalized = text.trim().toUpperCase();
-  if (mode === "flight") return normalized.match(/[A-Z]{2}\d{3,4}/)?.[0];
+  if (mode === "flight") return normalized.match(/[A-Z0-9]{2}\d{3,4}/)?.[0];
   if (mode === "rail") return normalized.match(/[GDCZTK]\d{1,5}/)?.[0];
   return "";
 }
 
+function extractTripDate(text) {
+  const match = String(text || "").match(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/);
+  if (!match) return "";
+  const [, year, month, day] = match;
+  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+}
+
+function extractTimeRange(text) {
+  const match = String(text || "").match(/(\d{1,2})[：:](\d{2})\s*(?:~|～|-|—|–|至|到)\s*(\d{1,2})[：:](\d{2})/);
+  if (!match) return { departureTime: "", arrivalTime: "" };
+  const depHour = match[1].padStart(2, "0");
+  const arrHour = match[3].padStart(2, "0");
+  return {
+    departureTime: `${depHour}:${match[2]}`,
+    arrivalTime: `${arrHour}:${match[4]}`
+  };
+}
+
 function inferRoute(text, mode) {
-  // 支持 "上海到杭州"、"惠州飞上海浦东" 等分隔符
-  const routeMatch = text.match(/(.+?)(?:到|->|至|飞)(.+)/);
+  // 支持 "上海到杭州"、"惠州飞上海浦东"、"惠州平潭--上海浦东" 等分隔符
+  const routeMatch = text.match(/(.+?)(?:到|->|--|—|–|至|飞)(.+)/);
   if (routeMatch) {
     return {
       origin: normalizePlace(cleanPlace(routeMatch[1])),
@@ -728,23 +928,32 @@ function inferRoute(text, mode) {
 function cleanPlace(value) {
   return value
     .replace(/打车|自驾|公交|大巴/g, "")
-    .replace(/^[A-Z]{1,3}\d{1,5}/, "") // 去掉残留在起点里的车次号（如 "G7254 合肥南" → "合肥南"）
+    .replace(/^[A-Z0-9]{1,3}\d{1,5}/i, "") // 去掉残留在起点里的车次号（如 "G7254 合肥南" → "合肥南"）
+    .replace(/\b20\d{2}[-/.]\d{1,2}[-/.]\d{1,2}\b.*$/, "")
+    .replace(/(?:上午|下午|晚上|早上|中午|凌晨)?\d{1,2}[：:]\d{2}.*$/, "")
     .trim() || "待确认";
 }
 
 function normalizePlace(value) {
-  if (places[value]) return value;
-  if (value.includes("北京")) return "北京";
-  if (value.includes("上海")) return "上海";
-  if (value.includes("杭州")) return "杭州";
-  if (value.includes("广州")) return "广州";
-  if (value.includes("深圳")) return "深圳";
-  if (value.includes("成都")) return "成都";
-  if (value.includes("西安")) return "西安";
-  if (value.includes("南京")) return "南京";
-  if (value.includes("武汉")) return "武汉";
-  if (value.includes("重庆")) return "重庆";
-  return value;
+  const trimmed = String(value || "").trim();
+  if (places[trimmed]) return trimmed;
+  const airportSuffixRemoved = trimmed.replace(/国际机场$/, "机场").replace(/机场$/, "");
+  if (places[airportSuffixRemoved]) return airportSuffixRemoved;
+  if (trimmed.includes("惠州平潭")) return "惠州平潭";
+  if (trimmed.includes("浦东")) return "上海浦东";
+  if (trimmed.includes("虹桥")) return "上海虹桥";
+  if (trimmed.includes("惠州")) return "惠州";
+  if (trimmed.includes("北京")) return "北京";
+  if (trimmed.includes("上海")) return "上海";
+  if (trimmed.includes("杭州")) return "杭州";
+  if (trimmed.includes("广州")) return "广州";
+  if (trimmed.includes("深圳")) return "深圳";
+  if (trimmed.includes("成都")) return "成都";
+  if (trimmed.includes("西安")) return "西安";
+  if (trimmed.includes("南京")) return "南京";
+  if (trimmed.includes("武汉")) return "武汉";
+  if (trimmed.includes("重庆")) return "重庆";
+  return trimmed;
 }
 
 function estimateDistance(origin, destination) {
@@ -972,7 +1181,7 @@ function renderHero() {
     <div class="hero-topline">
       <span class="mode-badge ${trip.mode}"><i class="mode-dot"></i>${modeLabel(trip.mode)} · ${statusLabel(trip.status)}</span>
       <div class="hero-actions">
-        ${trip.mode === "rail" && trip.origin !== "待确认" && trip.destination !== "待确认" ? `<button class="ghost-button small" data-action="tickets" type="button">实时余票</button>` : ""}
+        ${trip.mode === "flight" ? `<button class="ghost-button small" data-action="flight-query" type="button">航班查询</button>` : ""}
         <button class="ghost-button small" data-action="edit" type="button">编辑</button>
         <button class="danger-button small" data-action="delete" type="button">删除</button>
       </div>
@@ -994,8 +1203,8 @@ function renderHero() {
     renderHero();
   });
 
-  heroOverlay.querySelector('[data-action="tickets"]')?.addEventListener("click", () => {
-    showTicketPanel(trip);
+  heroOverlay.querySelector('[data-action="flight-query"]')?.addEventListener("click", () => {
+    openFlightPanel(trip.id);
   });
 
   heroOverlay.querySelector('[data-action="delete"]').addEventListener("click", () => {
@@ -1216,7 +1425,8 @@ async function openStationSelector(tripId, options = {}) {
     `;
 
     heroOverlay.querySelector('[data-action="skip"]').addEventListener("click", () => {
-      autoCompleteRailTrip(tripId);
+      editingTripId = null;
+      render();
     });
 
     // 用户改查询日期 → 用新日期重新查询（不再自动切明天）
@@ -1531,11 +1741,11 @@ function saveStationSelection(trip, stations) {
 async function handleFlightCompletion(tripId) {
   const trip = trips.find((item) => item.id === tripId);
   if (!trip || trip.mode !== "flight") return;
-  if (!/^[A-Z]{2}\d{3,4}$/i.test(trip.title)) return;
+  if (!/^[A-Z0-9]{2}\d{3,4}$/i.test(trip.title)) return;
   await openFlightPanel(tripId);
 }
 
-/** 在 Hero 卡片内查询航班信息：成功（含时刻）展示确认；失败/缺时刻降级手动补录。 */
+/** 在 Hero 卡片内查询航班信息：上方输入航班号+乘机日，下方展示查询结果或手动补录。 */
 async function openFlightPanel(tripId) {
   const trip = trips.find((item) => item.id === tripId);
   if (!trip) return;
@@ -1545,9 +1755,14 @@ async function openFlightPanel(tripId) {
       <div class="ticket-panel-head">
         <div>
           <p class="ticket-title">${escapeHtml(trip.title)} 航班查询</p>
-          <p class="ticket-sub" id="flightPanelStatus">正在查询航班信息…</p>
+          <p class="ticket-sub" id="flightPanelStatus">输入航班号和乘机日后查询。</p>
         </div>
         <button class="ghost-button small" data-action="skip" type="button">跳过</button>
+      </div>
+      <div class="flight-query-grid">
+        <label class="edit-field" for="flightQueryNo"><span>航班号</span><input id="flightQueryNo" value="${escapeHtml(trip.title)}" placeholder="HO2274"></label>
+        <label class="edit-field" for="flightQueryDate"><span>乘机日</span><input id="flightQueryDate" type="date" value="${escapeHtml(trip.date)}"></label>
+        <button class="primary-button" data-action="query-flight" type="button">查询</button>
       </div>
       <div class="station-list"></div>
     </div>
@@ -1559,53 +1774,112 @@ async function openFlightPanel(tripId) {
     render();
   });
 
+  heroOverlay.querySelector('[data-action="query-flight"]').addEventListener("click", () => {
+    runFlightSearchFromPanel(trip.id);
+  });
+
+  heroOverlay.querySelectorAll("#flightQueryNo, #flightQueryDate").forEach((field) => {
+    field.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        runFlightSearchFromPanel(trip.id);
+      }
+    });
+  });
+
+  await runFlightSearchFromPanel(trip.id);
+}
+
+async function runFlightSearchFromPanel(tripId) {
+  const trip = trips.find((item) => item.id === tripId);
+  if (!trip) return;
+
   const listEl = heroOverlay.querySelector(".station-list");
   const statusEl = heroOverlay.querySelector("#flightPanelStatus");
+  const queryButton = heroOverlay.querySelector('[data-action="query-flight"]');
+  if (!listEl || !statusEl) return;
+
+  const query = readFlightQueryValues();
+  if (!isValidFlightNumber(query.flightNo)) {
+    statusEl.textContent = "请输入正确的航班号，如 HO2274。";
+    listEl.innerHTML = '<p class="ticket-error">航班号格式无效。</p>';
+    return;
+  }
+  if (!query.flightDate) {
+    statusEl.textContent = "请选择乘机日。";
+    listEl.innerHTML = '<p class="ticket-error">乘机日不能为空。</p>';
+    return;
+  }
+
+  trip.title = query.flightNo;
+  trip.date = query.flightDate;
+  persistTrips();
+
+  const depAirport = trip.routeUserProvided && trip.origin !== "待确认" ? trip.origin : "";
+  const arrAirport = trip.routeUserProvided && trip.destination !== "待确认" ? trip.destination : "";
   listEl.innerHTML = `<p class="ticket-loading">正在查询 ${escapeHtml(trip.title)} 航班信息（${escapeHtml(trip.date)}）…</p>`;
+  statusEl.textContent = "正在查询航班信息…";
+  if (queryButton) queryButton.disabled = true;
 
   let result;
   try {
-    const response = await fetch(apiUrl("/api/flight/search"), {
+    const response = await apiFetch("/api/flight/search", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         flight_no: trip.title,
         flight_date: trip.date,
-        dep_airport: trip.origin === "待确认" ? "" : trip.origin,
-        arr_airport: trip.destination === "待确认" ? "" : trip.destination
+        dep_airport: depAirport,
+        arr_airport: arrAirport
       })
     });
-    result = await response.json();
+    if (response.status === 401) {
+      handleAuthExpired();
+      return;
+    }
+    result = await readResponseJson(response);
   } catch (e) {
+    statusEl.textContent = "网络不可用，无法查询航班信息。";
     renderFlightManualForm(trip, "网络不可用，无法查询航班信息。");
     return;
+  } finally {
+    if (queryButton) queryButton.disabled = false;
   }
 
-  // 航司始终由本地字典解析：先回填草稿（查询失败时也生效）
+  // 航司始终由本地字典解析：查询失败时也尽量回填草稿
   if (result.airline && (!trip.operator || trip.operator === "待补全航司")) {
     trip.operator = result.airline;
     persistTrips();
   }
 
-  if (result.success && result.departure_time && result.arrival_time) {
-    statusEl.textContent = `已查询到航班信息（数据源：${result.source}）。`;
+  if (result.success && hasFlightResultDetails(result)) {
+    statusEl.textContent = `已查询到航班信息（数据源：${flightSourceLabel(result.source)}）。`;
     renderFlightResult(trip, result);
     return;
   }
 
-  const hint = result.success ? "未查到时刻/机场信息，请手动补全。" : result.error || "未查询到该航班信息";
+  const hint = result.success
+    ? result.hint || "未查到机场/时刻信息，请手动补全。"
+    : result.error || "未查询到该航班信息";
   statusEl.textContent = hint;
-  renderFlightManualForm(trip, result.success ? "" : hint);
+  renderFlightManualForm(trip, result.success ? "" : hint, result);
 }
 
-/** 查询成功（含时刻）：展示只读结果，确认后写入正式行程。 */
+/** 查询成功：展示只读结果，确认后写入正式行程。 */
 function renderFlightResult(trip, result) {
   const listEl = heroOverlay.querySelector(".station-list");
+  const origin = flightAirportName(result, "dep") || (trip.routeUserProvided ? trip.origin : "");
+  const destination = flightAirportName(result, "arr") || (trip.routeUserProvided ? trip.destination : "");
+  const departureTime = result.departure_time || (trip.departureTime !== "待确认" ? trip.departureTime : "");
+  const arrivalTime = result.arrival_time || (trip.arrivalTime !== "待确认" ? trip.arrivalTime : "");
+  const codeLine = flightAirportCodeLine(result);
+  const fullNameLine = flightAirportFullNameLine(result);
   listEl.innerHTML = `
     <p class="ticket-success">已查询到 ${escapeHtml(trip.title)}（${escapeHtml(result.airline || "航司未知")}）航班信息：</p>
     <div class="station-preview">
-      <p class="station-route">${escapeHtml(trip.origin)} ${escapeHtml(result.departure_time)} → ${escapeHtml(trip.destination)} ${escapeHtml(result.arrival_time)}</p>
-      <p class="ticket-sub">${escapeHtml(trip.title)} · ${escapeHtml(trip.date)}${result.dep_airport_icao ? ` · ${escapeHtml(result.dep_airport_icao)} → ${escapeHtml(result.arr_airport_icao)}` : ""}</p>
+      <p class="station-route">${escapeHtml(origin || "待确认")} ${escapeHtml(departureTime || "待确认")} → ${escapeHtml(destination || "待确认")} ${escapeHtml(arrivalTime || "待确认")}</p>
+      <p class="ticket-sub">${escapeHtml(trip.title)} · ${escapeHtml(trip.date)}${result.duration ? ` · ${escapeHtml(result.duration)}` : ""}${codeLine ? ` · ${escapeHtml(codeLine)}` : ""}</p>
+      ${fullNameLine ? `<p class="ticket-sub">${escapeHtml(fullNameLine)}</p>` : ""}
     </div>
     <div class="edit-actions">
       <button class="primary-button" data-action="confirm" type="button">确认登记</button>
@@ -1614,12 +1888,15 @@ function renderFlightResult(trip, result) {
   `;
 
   listEl.querySelector('[data-action="confirm"]').addEventListener("click", () => {
-    trip.departureTime = result.departure_time;
-    trip.arrivalTime = result.arrival_time;
+    if (origin) trip.origin = normalizePlace(origin);
+    if (destination) trip.destination = normalizePlace(destination);
+    trip.routeUserProvided = Boolean(origin && destination);
+    trip.departureTime = departureTime || "待确认";
+    trip.arrivalTime = arrivalTime || "待确认";
     if (result.airline) trip.operator = result.airline;
-    trip.status = "completed";
+    trip.status = origin && destination && departureTime && arrivalTime ? "completed" : "draft";
     trip.distanceKm = estimateDistance(trip.origin, trip.destination) || trip.distanceKm;
-    trip.notes = `已通过航班查询（${result.source}）确认：${trip.origin} → ${trip.destination}。`;
+    trip.notes = `已通过航班查询（${flightSourceLabel(result.source)}）确认：${trip.origin} → ${trip.destination}。`;
     editingTripId = null;
     persistTrips();
     render();
@@ -1634,13 +1911,13 @@ function renderFlightResult(trip, result) {
 function renderFlightManualForm(trip, errorMsg = "", prefill = null) {
   const listEl = heroOverlay.querySelector(".station-list");
   // 占位区间（北京→上海）不作为预填，避免误导
-  const prefillFrom = trip.routeUserProvided && trip.origin !== "待确认" ? trip.origin : "";
-  const prefillTo = trip.routeUserProvided && trip.destination !== "待确认" ? trip.destination : "";
+  const prefillFrom = flightAirportName(prefill, "dep") || (trip.routeUserProvided && trip.origin !== "待确认" ? trip.origin : "");
+  const prefillTo = flightAirportName(prefill, "arr") || (trip.routeUserProvided && trip.destination !== "待确认" ? trip.destination : "");
   const depTime = (prefill && prefill.departure_time) || (trip.departureTime !== "待确认" ? trip.departureTime : "");
   const arrTime = (prefill && prefill.arrival_time) || (trip.arrivalTime !== "待确认" ? trip.arrivalTime : "");
   listEl.innerHTML = `
     ${errorMsg ? `<p class="ticket-error">${escapeHtml(errorMsg)}</p>` : ""}
-    <p class="ticket-sub">${escapeHtml(trip.title)} 未能自动补全时刻，请手动填写机场与时刻后保存（航司已识别：${escapeHtml(trip.operator || "未知")}）：</p>
+    <p class="ticket-sub">${escapeHtml(trip.title)} 未能自动补全完整航班信息。可在上方修改航班号/乘机日重新查询，也可以手动填写机场与时刻后保存（航司已识别：${escapeHtml(trip.operator || "未知")}）：</p>
     <div class="station-pick">
       <label class="edit-field"><span>出发</span><input id="flightFrom" placeholder="如 惠州" value="${escapeHtml(prefillFrom)}"></label>
       <label class="edit-field"><span>到达</span><input id="flightTo" placeholder="如 上海浦东" value="${escapeHtml(prefillTo)}"></label>
@@ -1667,16 +1944,19 @@ function renderFlightManualForm(trip, errorMsg = "", prefill = null) {
       trip.routeUserProvided = true;
       persistTrips();
     }
-    openFlightPanel(trip.id);
+    runFlightSearchFromPanel(trip.id);
   });
 
   listEl.querySelector('[data-action="save"]').addEventListener("click", () => {
+    const query = readFlightQueryValues();
     const from = listEl.querySelector("#flightFrom").value.trim();
     const to = listEl.querySelector("#flightTo").value.trim();
     if (!from || !to) {
       hintEl.textContent = "请填写出发和到达机场后再保存。";
       return;
     }
+    if (isValidFlightNumber(query.flightNo)) trip.title = query.flightNo;
+    if (query.flightDate) trip.date = query.flightDate;
     trip.origin = normalizePlace(from);
     trip.destination = normalizePlace(to);
     trip.routeUserProvided = true;
@@ -1691,114 +1971,53 @@ function renderFlightManualForm(trip, errorMsg = "", prefill = null) {
   });
 }
 
-/** 登记铁路车次后，自动向本地 12306 代理查询真实发到时刻补全草稿（失败静默）。 */
-async function autoCompleteRailTrip(tripId) {
-  const trip = trips.find((item) => item.id === tripId);
-  if (!trip || trip.mode !== "rail") return;
-  if (!/^[GDCZTK]\d{1,5}$/i.test(trip.title)) return;
-  if (trip.origin === "待确认" || trip.destination === "待确认") return;
-
-  try {
-    const response = await fetch(apiUrl("/api/12306/query-tickets"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from_station: trip.origin,
-        to_station: trip.destination,
-        train_date: trip.date
-      })
-    });
-    const result = await response.json();
-    if (!result.success || !result.trains) return;
-
-    const train = result.trains.find((t) => t.train_no.toUpperCase() === trip.title.toUpperCase());
-    if (!train) return;
-
-    let changed = false;
-    if (train.start_time && train.start_time !== "----") {
-      trip.departureTime = train.start_time;
-      changed = true;
-    }
-    if (train.arrive_time && train.arrive_time !== "----") {
-      trip.arrivalTime = train.arrive_time;
-      changed = true;
-    }
-    if (changed) {
-      trip.notes = `${trip.notes || ""} 已通过 12306 自动补全时刻（历时 ${train.duration}）。`.trim();
-      persistTrips();
-      render();
-    }
-  } catch (e) {
-    // 离线或服务不可用时静默保留手工草稿
-  }
+function readFlightQueryValues() {
+  return {
+    flightNo: normalizeFlightNumber(heroOverlay.querySelector("#flightQueryNo")?.value),
+    flightDate: heroOverlay.querySelector("#flightQueryDate")?.value || ""
+  };
 }
 
-/** 在 Hero 卡片内展示指定线路的实时余票列表。 */
-async function showTicketPanel(trip) {
-  heroOverlay.innerHTML = `
-    <div class="ticket-panel">
-      <div class="ticket-panel-head">
-        <div>
-          <p class="ticket-title">${escapeHtml(trip.origin)} → ${escapeHtml(trip.destination)}</p>
-          <p class="ticket-sub">${escapeHtml(trip.date)} · 12306 实时余票</p>
-        </div>
-        <button class="ghost-button small" data-action="close" type="button">返回</button>
-      </div>
-      <p class="ticket-loading">正在查询 12306…</p>
-      <div class="ticket-list"></div>
-    </div>
-  `;
-
-  heroOverlay.querySelector('[data-action="close"]').addEventListener("click", () => {
-    renderHero();
-  });
-
-  const loadingEl = heroOverlay.querySelector(".ticket-loading");
-  const listEl = heroOverlay.querySelector(".ticket-list");
-  // 余票查询用有效日期（历史登记日期时按今天查）
-  const queryDate = trip.date >= localToday() ? trip.date : localToday();
-
-  try {
-    const response = await fetch(apiUrl("/api/12306/query-tickets"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from_station: trip.origin,
-        to_station: trip.destination,
-        train_date: queryDate
-      })
-    });
-    const result = await response.json();
-    loadingEl.hidden = true;
-
-    if (!result.success || !result.trains || !result.trains.length) {
-      listEl.innerHTML = `<p class="ticket-error">${escapeHtml(result.error || "未查询到余票信息")}</p>`;
-      return;
-    }
-
-    const trains = result.trains.slice(0, 40);
-    listEl.innerHTML = trains
-      .map(
-        (t) => `
-        <div class="ticket-row ${t.train_no.toUpperCase() === trip.title.toUpperCase() ? " match" : ""}">
-          <span class="ticket-code">${escapeHtml(t.train_no)}</span>
-          <span class="ticket-times">${escapeHtml(t.start_time)} → ${escapeHtml(t.arrive_time)} · ${escapeHtml(t.duration)}</span>
-          <span class="ticket-stations">${escapeHtml(t.from_station)} → ${escapeHtml(t.to_station)}</span>
-          <span class="ticket-seats">${seatSummary(t.seats)}</span>
-        </div>
-      `
-      )
-      .join("");
-  } catch (e) {
-    loadingEl.hidden = true;
-    listEl.innerHTML = '<p class="ticket-error">网络不可用，无法查询 12306 余票（离线模式）。</p>';
-  }
+function normalizeFlightNumber(value) {
+  return String(value || "").trim().toUpperCase().replace(/\s+/g, "");
 }
 
-function seatSummary(seats) {
-  const entries = Object.entries(seats || {}).filter(([, value]) => value && value !== "无" && value !== "--");
-  if (!entries.length) return "无票";
-  return entries.slice(0, 3).map(([key, value]) => `${key} ${value}`).join(" · ");
+function isValidFlightNumber(value) {
+  return /^[A-Z0-9]{2}\d{3,4}$/i.test(value || "");
+}
+
+function flightAirportName(result, prefix) {
+  if (!result) return "";
+  return result[`${prefix}_airport`] || result[`${prefix}_airport_name`] || "";
+}
+
+function flightAirportFullNameLine(result) {
+  if (!result) return "";
+  const from = result.dep_airport_name || "";
+  const to = result.arr_airport_name || "";
+  return from && to ? `${from} → ${to}` : "";
+}
+
+function flightAirportCodeLine(result) {
+  if (!result) return "";
+  const depCode = [result.dep_airport_iata, result.dep_airport_icao].filter(Boolean).join("/");
+  const arrCode = [result.arr_airport_iata, result.arr_airport_icao].filter(Boolean).join("/");
+  return depCode && arrCode ? `${depCode} → ${arrCode}` : "";
+}
+
+function hasFlightResultDetails(result) {
+  const hasAirports = Boolean(flightAirportName(result, "dep") && flightAirportName(result, "arr"));
+  const hasTimes = Boolean(result?.departure_time && result?.arrival_time);
+  return hasAirports || hasTimes;
+}
+
+function flightSourceLabel(source) {
+  const labels = {
+    "local-timetable": "本地航班表",
+    local: "本地字典",
+    opensky: "OpenSky"
+  };
+  return labels[source] || source || "未知";
 }
 
 function deleteTrip(tripId) {

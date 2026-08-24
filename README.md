@@ -12,7 +12,7 @@ Leaves 是一个 Windows 优先的个人出行记录软件。它的目标不是�
 - ✅ 账号入口：进入 Leaves 前先登录或注册，行程按账号隔离保存。
 - ✅ 本地优先：账号维度 localStorage 缓存 + 本地服务文件持久化（正式版替换为 SQLite）。
 - ✅ 行程管理：新增、内联编辑、删除行程，JSON 一键导入导出。
-- ✅ 12306 铁路查询：登记车次后自动补全真实发到时刻；铁路行程支持实时余票查询（逻辑移植自 mcp-server-12306）。
+- ✅ 12306 铁路查询：登记车次后通过经停站选择补全真实发到时刻（逻辑移植自 mcp-server-12306）。
 - ⏳ 数据源可替换：通过 provider adapter 接入航班、铁路、地图、OCR 等能力。
 
 ## 当前产出
@@ -85,13 +85,15 @@ apps/desktop-prototype/index.html
 
 | 接口 | 方法 | 能力 |
 | --- | --- | --- |
-| `/api/12306/query-tickets` | POST | 余票/车次/座席/时刻查询 |
-| `/api/12306/query-ticket-price` | POST | 实时票价查询 |
 | `/api/12306/search-stations` | GET | 车站搜索（中文/拼音/简拼/三字码） |
 | `/api/12306/query-transfer` | POST | 中转换乘方案 |
 | `/api/12306/train-route` | POST | 经停站与时刻表 |
 | `/api/12306/train-no` | POST | 车次号 → 官方唯一编号 |
 | `/api/12306/current-time` | GET | 当前时间 |
+| `/api/flight/search` | POST | 航班号 + 乘机日查询，返回航司、起降机场、机场代码与时刻 |
+| `/api/user/settings/opensky` | GET/PUT | 当前账号的 OpenSky clientId/clientSecret 维护（secret 不回显） |
+| `/api/user/settings/opensky/test` | POST | 使用 OpenSky OAuth2 client credentials 换 token 测试 |
+| `/api/opensky/request` | POST | 受控代理 OpenSky REST：states、flights、tracks |
 
 前端集成：
 
@@ -99,9 +101,11 @@ apps/desktop-prototype/index.html
 - **上下车站选择（纯车次号直查）**：登记铁路车次后自动查询——**只需输入车次号**（如 `G7254`），后端通过 12306 官方搜索接口自动定位车次（始发/终到站 + 官方编号），无需填写起讫区间；定位成功后显示成功提示（“已查询到车次信息”）并展示全部经停站下拉列表让用户选择出发/到达站；自动定位失败时回退到车站联想下拉，仍可直接填写起讫区间点击“直接保存”手动登记（不依赖 12306）。确认的区间会被记住，下次登记同一车次更快直达。
 - **距离兜底**：保存时按起讫站坐标计算直线距离（内置 90+ 城市/车站坐标表，支持城市级回退），无接口里程数据时自动补上。
 - **编辑表单联动**：草稿态编辑铁路车次时，若查询到经停站，起点/终点自动切换为经停站下拉选择（带成功提示）；查询不到则保持文本输入。
-- **自动补全**：无法查询经停站时（离线/车次不在区间内），自动补全真实发到时刻作为兜底。
-- **实时余票**：铁路行程 Hero 卡片上的“实时余票”按钮，展示该线路当日全部车次与座席余票，本车次高亮。
-- **日期限制**：登记日期只能选择今天及以后（12306 预售期限制，后端同步校验）。
+- **自动补全**：查询到经停站后按用户选择的上下车站写入真实发到时刻；无法查询时保留手动补录。
+- **航班补全**：登记航班后可在 Hero 卡片点击“航班查询”，输入航班号与乘机日查询；当前内置本地航班表可离线补全 `HO2274` 在 `2026-07-20` 的惠州平潭 → 上海浦东、21:05 → 23:25 信息，未收录航班会优先用当前账号保存的 OpenSky REST 凭证查询，到离港查询仍无结果时回退到航司识别和手动补录。
+- **OpenSky 凭证维护**：点击顶栏用户名进入账号设置，可保存/测试/清除 OpenSky `clientId` 与 `clientSecret`；后端使用 OAuth2 client credentials 换取 Bearer token 并做 30 分钟级缓存，前端不会读取已保存的 `clientSecret`。如果本机代理/VPN 使用 fake-ip，设置里可填写 `Proxy URL`（如 `http://127.0.0.1:7890`），也可通过 `LEAVES_HTTPS_PROXY` / `HTTPS_PROXY` 环境变量配置。
+- **OpenSky 网络排障**：测试时报 `connect EACCES 198.18.x.x:443` 通常表示 OpenSky 域名被代理软件解析到了 fake-ip，但 Node 后端没有走代理；填写账号设置中的 `Proxy URL` 后重试，或设置代理环境变量并重启 `npm start`。
+- **查询日期限制**：12306 查询日期仅支持今天到 14 天后；登记日期保存真实出行日，可填写历史日期。
 - **账号与本地持久化**：进入应用前先通过 `/api/auth/register` 或 `/api/auth/login` 建立 session；行程数据双写保存到当前账号自己的浏览器 localStorage key 和本地文件 `apps/desktop-prototype/data/users/<user-id>.trips.json`（通过 `/api/data/trips` 读写，重启/换浏览器不丢）。
 
 实现要点（移植自 [mcp-server-12306](https://github.com/drfccv/mcp-server-12306)，MIT License）：浏览器模拟请求头 + init 会话 Cookie 维持 + 网络重试 + 反爬拦截检测 + 车站名↔三字码转换（内置 3400+ 车站数据）。车站数据与查询均为本地代理完成，断网时自动降级为纯手工登记，不影响离线使用。
