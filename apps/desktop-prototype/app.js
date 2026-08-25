@@ -197,11 +197,95 @@ const seedTrips = [
   }
 ];
 
+const achievementDefinitions = [
+  {
+    id: "first-trip",
+    mark: "01",
+    title: "第一片叶",
+    detail: "完成 1 条行程记录",
+    target: 1,
+    getValue: (stats) => stats.totalTrips
+  },
+  {
+    id: "weekend-run",
+    mark: "WE",
+    title: "周末出发",
+    detail: "记录 3 次周末行程",
+    target: 3,
+    getValue: (stats) => stats.weekendTrips
+  },
+  {
+    id: "air-track",
+    mark: "FL",
+    title: "云端航迹",
+    detail: "记录 3 次航班",
+    target: 3,
+    getValue: (stats) => stats.modeCounts.flight
+  },
+  {
+    id: "rail-line",
+    mark: "CR",
+    title: "铁路纵横",
+    detail: "记录 3 次铁路",
+    target: 3,
+    getValue: (stats) => stats.modeCounts.rail
+  },
+  {
+    id: "sea-route",
+    mark: "SH",
+    title: "海上路线",
+    detail: "记录 1 次轮船",
+    target: 1,
+    getValue: (stats) => stats.modeCounts.ship
+  },
+  {
+    id: "city-collector",
+    mark: "CT",
+    title: "城市收藏",
+    detail: "点亮 8 个城市",
+    target: 8,
+    getValue: (stats) => stats.cityCount
+  },
+  {
+    id: "multi-mode",
+    mark: "MX",
+    title: "多方式旅行",
+    detail: "使用 3 种交通方式",
+    target: 3,
+    getValue: (stats) => stats.activeModeCount
+  },
+  {
+    id: "five-thousand",
+    mark: "5K",
+    title: "五千公里",
+    detail: "累计 5000 km",
+    target: 5000,
+    getValue: (stats) => stats.totalKm
+  },
+  {
+    id: "ten-thousand",
+    mark: "10K",
+    title: "万里长线",
+    detail: "累计 10000 km",
+    target: 10000,
+    getValue: (stats) => stats.totalKm
+  },
+  {
+    id: "night-window",
+    mark: "NT",
+    title: "夜间窗口",
+    detail: "记录 1 次夜间出发",
+    target: 1,
+    getValue: (stats) => stats.nightTrips
+  }
+];
+
 let currentUser = null;
 let trips = [];
 let activeFilter = "all";
 let selectedTripId = null;
 let editingTripId = null;
+let currentView = "home";
 let appStarted = false;
 let map;
 let tileLayer;
@@ -213,16 +297,36 @@ let routeLayer;
 let markerLayer;
 let routeByTripId = new Map();
 let markerByTripId = new Map();
+let mapAssetsPromise = null;
+let chinaGeoJsonPromise = null;
+const loadedStylesheets = new Set();
+const scriptPromises = new Map();
 
 const form = document.querySelector("#quickAddForm");
 const input = document.querySelector("#tripInput");
 const modeSelect = document.querySelector("#tripMode");
 const dateInput = document.querySelector("#tripDate");
+const viewButtons = document.querySelectorAll("[data-view]");
+const appViews = document.querySelectorAll("[data-view-panel]");
 const tripStrip = document.querySelector("#tripStrip");
 const heroOverlay = document.querySelector("#heroOverlay");
 const statsLine = document.querySelector("#statsLine");
 const mapFallback = document.querySelector("#mapFallback");
 const tileSourceLabel = document.querySelector("#tileSourceLabel");
+const dashboardRange = document.querySelector("#dashboardRange");
+const dashboardSummary = document.querySelector("#dashboardSummary");
+const dashboardMetricGrid = document.querySelector("#dashboardMetricGrid");
+const modeDominant = document.querySelector("#modeDominant");
+const modeBreakdown = document.querySelector("#modeBreakdown");
+const monthlyTimeline = document.querySelector("#monthlyTimeline");
+const topRoutesList = document.querySelector("#topRoutesList");
+const routeCountLabel = document.querySelector("#routeCountLabel");
+const recentHighlights = document.querySelector("#recentHighlights");
+const recentCountLabel = document.querySelector("#recentCountLabel");
+const achievementSummary = document.querySelector("#achievementSummary");
+const achievementLevel = document.querySelector("#achievementLevel");
+const achievementProgress = document.querySelector("#achievementProgress");
+const achievementGrid = document.querySelector("#achievementGrid");
 const exportButtons = document.querySelectorAll(".export-json");
 const importButtons = document.querySelectorAll(".import-json");
 const importFile = document.querySelector("#importFile");
@@ -312,6 +416,7 @@ form.addEventListener("submit", (event) => {
   persistTrips();
   input.value = "";
   modeSelect.value = "auto";
+  switchView("home", { skipRender: true });
   render();
   handleRailStationSelection(draft.id);
   handleFlightCompletion(draft.id);
@@ -330,6 +435,12 @@ importFile.addEventListener("change", () => {
   importFile.value = "";
 });
 
+viewButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    switchView(button.dataset.view);
+  });
+});
+
 document.querySelectorAll(".segment").forEach((button) => {
   button.addEventListener("click", () => {
     activeFilter = button.dataset.filter;
@@ -341,6 +452,29 @@ document.querySelectorAll(".segment").forEach((button) => {
 
 setAuthMode("login");
 checkExistingSession();
+
+function switchView(view, options = {}) {
+  currentView = ["home", "dashboard", "achievements"].includes(view) ? view : "home";
+
+  viewButtons.forEach((button) => {
+    const active = button.dataset.view === currentView;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
+
+  appViews.forEach((panel) => {
+    panel.hidden = panel.dataset.viewPanel !== currentView;
+  });
+
+  if (currentView === "home") {
+    scheduleMapInit();
+    setTimeout(() => {
+      if (map) map.invalidateSize();
+    }, 0);
+  }
+
+  if (!options.skipRender) render();
+}
 
 function setAuthMode(mode) {
   authMode = mode === "register" ? "register" : "login";
@@ -426,14 +560,12 @@ function enterApp(user) {
     button.classList.toggle("active", button.dataset.filter === "all");
   });
 
+  switchView("home", { skipRender: true });
   trips = loadTripsFromLocal();
   selectedTripId = trips[0]?.id || null;
 
-  if (!appStarted) {
-    appStarted = true;
-    initMap();
-  }
   render();
+  scheduleMapInit();
   syncTripsFromServer();
   setTimeout(() => {
     if (map) map.invalidateSize();
@@ -621,55 +753,115 @@ async function readResponseJson(response) {
   }
 }
 
-// Leaflet 本地 vendor 同步加载；若失败（如文件缺失），降级到 CDN 并继续轮询
-function initMap(attempt = 0) {
-  if (window.L) {
-    setupMap();
-    return;
-  }
+function scheduleMapInit() {
+  if (appStarted || map) return;
+  appStarted = true;
+  setMapFallback("地图资源加载中", "正在准备本地地图资源。");
 
-  if (attempt === 4) {
-    loadLeafletFromCdn();
+  const start = () => initMap();
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(start, { timeout: 700 });
+  } else {
+    setTimeout(start, 80);
   }
-
-  if (attempt < 30) {
-    setTimeout(() => initMap(attempt + 1), 500);
-    return;
-  }
-
-  mapFallback.hidden = false;
-  mapFallback.querySelector("span").textContent =
-    "Leaflet 本地资源加载失败，请强制刷新页面（Ctrl+F5）或确认 vendor/leaflet/ 目录完整。";
 }
 
-function loadLeafletFromCdn() {
+function initMap() {
+  if (map) return;
+  mapAssetsPromise = mapAssetsPromise || loadLeafletAssets();
+  mapAssetsPromise
+    .then(() => {
+      if (!window.L) throw new Error("Leaflet unavailable");
+      setupMap();
+    })
+    .catch(() => {
+      appStarted = false;
+      mapAssetsPromise = null;
+      setMapFallback(
+        "地图资源未加载",
+        "Leaflet 资源加载失败，请强制刷新页面（Ctrl+F5）或确认 vendor/leaflet/ 目录完整。"
+      );
+    });
+}
+
+function loadLeafletAssets() {
+  if (window.L) {
+    loadStylesheetOnce("./vendor/leaflet/leaflet.css").catch(() => {});
+    return Promise.resolve();
+  }
+
+  return Promise.all([
+    loadStylesheetOnce("./vendor/leaflet/leaflet.css").catch(() => {}),
+    loadScriptOnce("./vendor/leaflet/leaflet.js")
+  ])
+    .then(() => {
+      if (!window.L) throw new Error("local Leaflet missing");
+    })
+    .catch(() => loadLeafletFromCdn());
+}
+
+function loadLeafletFromCdn(index = 0) {
   const cdnSources = [
     { css: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css", js: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" },
     { css: "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css", js: "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" },
     { css: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css", js: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" },
     { css: "https://cdn.bootcdn.net/ajax/libs/leaflet/1.9.4/leaflet.css", js: "https://cdn.bootcdn.net/ajax/libs/leaflet/1.9.4/leaflet.js" }
   ];
+  const source = cdnSources[index];
+  if (!source) return Promise.reject(new Error("Leaflet CDN unavailable"));
 
-  function loadCss(href) {
+  loadStylesheetOnce(source.css).catch(() => {});
+  return loadScriptOnce(source.js)
+    .then(() => {
+      if (!window.L) throw new Error("CDN Leaflet missing");
+    })
+    .catch(() => loadLeafletFromCdn(index + 1));
+}
+
+function loadStylesheetOnce(href) {
+  if (loadedStylesheets.has(href)) return Promise.resolve();
+  loadedStylesheets.add(href);
+
+  return new Promise((resolve, reject) => {
     const link = document.createElement("link");
     link.rel = "stylesheet";
     link.href = href;
+    link.onload = () => resolve();
+    link.onerror = () => {
+      loadedStylesheets.delete(href);
+      reject(new Error(`Stylesheet failed: ${href}`));
+    };
     document.head.appendChild(link);
-  }
+  });
+}
 
-  function tryLoad(index) {
-    if (index >= cdnSources.length || window.L) return;
+function loadScriptOnce(src) {
+  if (scriptPromises.has(src)) return scriptPromises.get(src);
+
+  const promise = new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = cdnSources[index].js;
-    script.onload = () => loadCss(cdnSources[index].css);
-    script.onerror = () => tryLoad(index + 1);
+    script.src = src;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => {
+      scriptPromises.delete(src);
+      reject(new Error(`Script failed: ${src}`));
+    };
     document.head.appendChild(script);
-  }
+  });
+  scriptPromises.set(src, promise);
+  return promise;
+}
 
-  tryLoad(0);
+function setMapFallback(title, message) {
+  mapFallback.hidden = false;
+  mapFallback.querySelector("strong").textContent = title;
+  mapFallback.querySelector("span").textContent = message;
 }
 
 function setupMap() {
+  if (map) return;
+  mapFallback.hidden = true;
   map = L.map("leafletMap", {
     zoomControl: true,
     attributionControl: true
@@ -696,7 +888,7 @@ function setupMap() {
   setTimeout(() => map.invalidateSize(), 0);
 }
 
-// 优先用 script 注入的全局数据（兼容 file:// 双击打开），其次 fetch 本地 geojson
+// 懒加载本地省界底图：script 路径兼容 file://，fetch 路径便于压缩传输。
 function loadChinaBaseGeoJson() {
   const addLayer = (geojson) => {
     if (!geojson || !map) return;
@@ -708,18 +900,28 @@ function loadChinaBaseGeoJson() {
     refreshBaseLayerStyle();
   };
 
-  if (window.LEAVES_CHINA_GEOJSON) {
-    addLayer(window.LEAVES_CHINA_GEOJSON);
-    return;
-  }
-
-  fetch("./vendor/china-provinces.geojson")
-    .then((response) => {
-      if (!response.ok) throw new Error("geojson missing");
-      return response.json();
-    })
+  loadChinaGeoJson()
     .then(addLayer)
     .catch(() => {});
+}
+
+function loadChinaGeoJson() {
+  if (window.LEAVES_CHINA_GEOJSON) return Promise.resolve(window.LEAVES_CHINA_GEOJSON);
+  if (chinaGeoJsonPromise) return chinaGeoJsonPromise;
+
+  chinaGeoJsonPromise = loadScriptOnce("./vendor/china-provinces.js")
+    .then(() => {
+      if (!window.LEAVES_CHINA_GEOJSON) throw new Error("province data missing");
+      return window.LEAVES_CHINA_GEOJSON;
+    })
+    .catch(() =>
+      fetch("./vendor/china-provinces.geojson").then((response) => {
+        if (!response.ok) throw new Error("geojson missing");
+        return response.json();
+      })
+    );
+
+  return chinaGeoJsonPromise;
 }
 
 function offlineBaseStyle() {
@@ -981,14 +1183,17 @@ function degreesToRadians(value) {
 
 function render() {
   const visibleTrips = getVisibleTrips();
+  const stats = getTripStats();
   if (!visibleTrips.some((trip) => trip.id === selectedTripId)) {
     selectedTripId = visibleTrips[0]?.id || trips[0]?.id;
   }
 
   renderTripStrip(visibleTrips);
-  renderMap(visibleTrips);
+  if (currentView === "home") renderMap(visibleTrips);
   renderHero();
-  renderStats();
+  renderStats(stats);
+  renderDashboard(stats);
+  renderAchievements(stats);
 }
 
 function getVisibleTrips() {
@@ -2072,19 +2277,309 @@ function importTrips(file) {
   reader.readAsText(file);
 }
 
-function renderStats() {
+function getTripStats() {
+  const modeCounts = { flight: 0, rail: 0, ship: 0, road: 0 };
+  const modeKm = { flight: 0, rail: 0, ship: 0, road: 0 };
   const cities = new Set();
+  const routeMap = new Map();
+  const monthMap = new Map();
+  const datedTrips = [];
+  let completedCount = 0;
+  let plannedCount = 0;
+  let totalKm = 0;
+  let weekendTrips = 0;
+  let nightTrips = 0;
+
   trips.forEach((trip) => {
-    if (trip.origin !== "待确认") cities.add(trip.origin);
-    if (trip.destination !== "待确认") cities.add(trip.destination);
+    const mode = modeCounts[trip.mode] === undefined ? "road" : trip.mode;
+    const distanceKm = Number(trip.distanceKm) || 0;
+    modeCounts[mode] += 1;
+    modeKm[mode] += distanceKm;
+    totalKm += distanceKm;
+
+    if (trip.status === "completed") completedCount += 1;
+    if (trip.status === "planned" || trip.status === "draft") plannedCount += 1;
+    if (trip.origin && trip.origin !== "待确认") cities.add(trip.origin);
+    if (trip.destination && trip.destination !== "待确认") cities.add(trip.destination);
+
+    const routeKnown = trip.origin && trip.destination && trip.origin !== "待确认" && trip.destination !== "待确认";
+    if (routeKnown) {
+      const routeKey = `${trip.origin}|${trip.destination}`;
+      const route = routeMap.get(routeKey) || {
+        origin: trip.origin,
+        destination: trip.destination,
+        count: 0,
+        km: 0,
+        modes: new Set()
+      };
+      route.count += 1;
+      route.km += distanceKm;
+      route.modes.add(mode);
+      routeMap.set(routeKey, route);
+    }
+
+    const date = parseTripDate(trip.date);
+    if (date) {
+      datedTrips.push({ trip, date });
+      const monthKey = formatMonthKey(date);
+      const month = monthMap.get(monthKey) || { key: monthKey, count: 0, km: 0 };
+      month.count += 1;
+      month.km += distanceKm;
+      monthMap.set(monthKey, month);
+      const day = date.getDay();
+      if (day === 0 || day === 6) weekendTrips += 1;
+    }
+
+    if (isNightDeparture(trip.departureTime)) nightTrips += 1;
   });
 
-  const totalKm = trips.reduce((sum, trip) => sum + (trip.distanceKm || 0), 0);
-  const flightCount = trips.filter((trip) => trip.mode === "flight").length;
-  const railCount = trips.filter((trip) => trip.mode === "rail").length;
-  const shipCount = trips.filter((trip) => trip.mode === "ship").length;
+  datedTrips.sort((a, b) => a.date - b.date);
+  const latestDatedTrips = [...datedTrips].sort((a, b) => b.date - a.date);
+  const fallbackRecentTrips = trips.slice(0, 5).map((trip) => ({ trip, date: parseTripDate(trip.date) }));
+  const recentTrips = (latestDatedTrips.length ? latestDatedTrips : fallbackRecentTrips).slice(0, 5);
+  const longestTrip = trips.reduce((best, trip) => {
+    return (Number(trip.distanceKm) || 0) > (Number(best?.distanceKm) || 0) ? trip : best;
+  }, null);
+  const topRoutes = [...routeMap.values()]
+    .map((route) => ({ ...route, modes: [...route.modes] }))
+    .sort((a, b) => b.count - a.count || b.km - a.km)
+    .slice(0, 5);
+  const anchorDate = latestDatedTrips[0]?.date || parseTripDate(localToday()) || new Date();
+  const monthly = getRecentMonthStats(monthMap, anchorDate);
+  const dominantMode = Object.keys(modeCounts).reduce((best, mode) => {
+    if (!best || modeCounts[mode] > modeCounts[best]) return mode;
+    return best;
+  }, "");
+
+  return {
+    totalTrips: trips.length,
+    totalKm,
+    cityCount: cities.size,
+    completedCount,
+    plannedCount,
+    completedRate: trips.length ? Math.round((completedCount / trips.length) * 100) : 0,
+    modeCounts,
+    modeKm,
+    activeModeCount: Object.values(modeCounts).filter(Boolean).length,
+    dominantMode: modeCounts[dominantMode] ? dominantMode : "",
+    weekendTrips,
+    nightTrips,
+    firstDate: datedTrips[0]?.date || null,
+    lastDate: datedTrips[datedTrips.length - 1]?.date || null,
+    longestTrip,
+    topRoutes,
+    routeCount: routeMap.size,
+    monthly,
+    recentTrips
+  };
+}
+
+function parseTripDate(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatMonthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function formatDateLabel(date) {
+  if (!date) return "";
+  return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function getRecentMonthStats(monthMap, anchorDate) {
+  const months = [];
+  for (let offset = 5; offset >= 0; offset -= 1) {
+    const date = new Date(anchorDate.getFullYear(), anchorDate.getMonth() - offset, 1);
+    const key = formatMonthKey(date);
+    const item = monthMap.get(key) || { key, count: 0, km: 0 };
+    months.push({
+      ...item,
+      label: `${date.getMonth() + 1}月`
+    });
+  }
+  return months;
+}
+
+function isNightDeparture(value) {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return false;
+  const hour = Number(match[1]);
+  return hour >= 22 || hour < 6;
+}
+
+function renderStats(stats = getTripStats()) {
   statsLine.innerHTML =
-    `${trips.length} 条 · <strong>${totalKm} km</strong> · ${cities.size} 城 · 飞 ${flightCount} · 铁 ${railCount} · 轮 ${shipCount}`;
+    `${stats.totalTrips} 条 · <strong>${formatNumber(stats.totalKm)} km</strong> · ${stats.cityCount} 城 · 飞 ${stats.modeCounts.flight} · 铁 ${stats.modeCounts.rail} · 轮 ${stats.modeCounts.ship}`;
+}
+
+function renderDashboard(stats = getTripStats()) {
+  if (!dashboardMetricGrid) return;
+
+  dashboardRange.textContent = stats.totalTrips
+    ? `${formatDateLabel(stats.firstDate)} - ${formatDateLabel(stats.lastDate)}`
+    : "暂无行程数据";
+  dashboardSummary.textContent = `${formatNumber(stats.totalKm)} km`;
+
+  const averageKm = stats.totalTrips ? Math.round(stats.totalKm / stats.totalTrips) : 0;
+  dashboardMetricGrid.innerHTML = [
+    metricCard("行程数", formatNumber(stats.totalTrips), `${stats.completedRate}% 已完成`),
+    metricCard("累计里程", `${formatNumber(stats.totalKm)} km`, `单次均值 ${formatNumber(averageKm)} km`),
+    metricCard("点亮城市", formatNumber(stats.cityCount), `${stats.routeCount} 条路线`),
+    metricCard("待确认", formatNumber(stats.plannedCount), stats.longestTrip ? `最长 ${formatNumber(stats.longestTrip.distanceKm || 0)} km` : "暂无最长行程")
+  ].join("");
+
+  renderModeBreakdown(stats);
+  renderMonthlyTimeline(stats);
+  renderTopRoutes(stats);
+  renderRecentHighlights(stats);
+}
+
+function metricCard(label, value, meta) {
+  return `
+    <article class="metric-card">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <small>${escapeHtml(meta)}</small>
+    </article>
+  `;
+}
+
+function renderModeBreakdown(stats) {
+  const modes = ["flight", "rail", "ship", "road"];
+  const maxCount = Math.max(...modes.map((mode) => stats.modeCounts[mode]), 1);
+  modeDominant.textContent = stats.dominantMode ? `${modeLabel(stats.dominantMode)}最多` : "暂无";
+  modeBreakdown.innerHTML = modes
+    .map((mode) => {
+      const count = stats.modeCounts[mode];
+      const percent = Math.round((count / maxCount) * 100);
+      return `
+        <div class="mode-row">
+          <span class="mode-name"><i class="mode-dot ${mode}"></i>${modeLabel(mode)}</span>
+          <div class="mode-bar" aria-hidden="true"><i style="width: ${percent}%"></i></div>
+          <strong>${count}</strong>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function renderMonthlyTimeline(stats) {
+  const maxKm = Math.max(...stats.monthly.map((item) => item.km), 1);
+  monthlyTimeline.innerHTML = stats.monthly
+    .map((item) => {
+      const percent = item.km ? Math.max(8, Math.round((item.km / maxKm) * 100)) : 0;
+      return `
+        <div class="timeline-item">
+          <div class="timeline-track"><i style="height: ${percent}%"></i></div>
+          <strong>${formatNumber(item.count)}</strong>
+          <span>${escapeHtml(item.label)}</span>
+          <small>${formatNumber(item.km)} km</small>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function renderTopRoutes(stats) {
+  routeCountLabel.textContent = `${stats.routeCount} 条`;
+  if (!stats.topRoutes.length) {
+    topRoutesList.innerHTML = `<p class="empty-copy">暂无路线</p>`;
+    return;
+  }
+
+  topRoutesList.innerHTML = stats.topRoutes
+    .map((route, index) => `
+      <article class="rank-item">
+        <span class="rank-no">${index + 1}</span>
+        <div>
+          <strong>${escapeHtml(route.origin)} → ${escapeHtml(route.destination)}</strong>
+          <small>${escapeHtml(route.modes.map(modeLabel).join(" / "))}</small>
+        </div>
+        <span>${route.count} 次 · ${formatNumber(route.km)} km</span>
+      </article>
+    `)
+    .join("");
+}
+
+function renderRecentHighlights(stats) {
+  recentCountLabel.textContent = `${stats.recentTrips.length} 条`;
+  if (!stats.recentTrips.length) {
+    recentHighlights.innerHTML = `<p class="empty-copy">暂无动态</p>`;
+    return;
+  }
+
+  recentHighlights.innerHTML = stats.recentTrips
+    .map(({ trip, date }) => `
+      <article class="rank-item">
+        <span class="rank-no ${trip.mode}">${modeLabel(trip.mode).slice(0, 1)}</span>
+        <div>
+          <strong>${escapeHtml(trip.origin)} → ${escapeHtml(trip.destination)}</strong>
+          <small>${escapeHtml(trip.title)} · ${escapeHtml(statusLabel(trip.status))}</small>
+        </div>
+        <span>${escapeHtml(date ? formatDateLabel(date) : trip.date)} · ${formatNumber(trip.distanceKm || 0)} km</span>
+      </article>
+    `)
+    .join("");
+}
+
+function renderAchievements(stats = getTripStats()) {
+  if (!achievementGrid) return;
+
+  const achievements = evaluateAchievements(stats);
+  const unlocked = achievements.filter((item) => item.unlocked);
+  const next = achievements.find((item) => !item.unlocked);
+  const overallPercent = achievements.length ? Math.round((unlocked.length / achievements.length) * 100) : 0;
+
+  achievementSummary.textContent = `${unlocked.length} / ${achievements.length} 已解锁`;
+  achievementLevel.textContent = `Lv. ${Math.floor(unlocked.length / 2)}`;
+  achievementProgress.innerHTML = `
+    <div class="progress-copy">
+      <strong>${overallPercent}%</strong>
+      <span>${next ? `下一项：${next.title}` : "全部成就已解锁"}</span>
+    </div>
+    <div class="progress-meter" aria-hidden="true"><i style="width: ${overallPercent}%"></i></div>
+  `;
+
+  achievementGrid.innerHTML = achievements
+    .map((item) => {
+      const percent = Math.round(item.progress * 100);
+      return `
+        <article class="achievement-card ${item.unlocked ? "unlocked" : "locked"}">
+          <div class="achievement-mark">${escapeHtml(item.mark)}</div>
+          <div class="achievement-body">
+            <div class="achievement-title">
+              <strong>${escapeHtml(item.title)}</strong>
+              <span>${item.unlocked ? "已解锁" : `${formatNumber(item.value)} / ${formatNumber(item.target)}`}</span>
+            </div>
+            <p>${escapeHtml(item.detail)}</p>
+            <div class="mini-meter" aria-hidden="true"><i style="width: ${percent}%"></i></div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function evaluateAchievements(stats) {
+  return achievementDefinitions.map((definition) => {
+    const value = Math.max(0, Number(definition.getValue(stats)) || 0);
+    const progress = definition.target ? Math.min(1, value / definition.target) : 0;
+    return {
+      ...definition,
+      value,
+      progress,
+      unlocked: progress >= 1
+    };
+  });
+}
+
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString("zh-CN");
 }
 
 function modeLabel(mode) {

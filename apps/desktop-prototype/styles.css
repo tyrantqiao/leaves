@@ -37,7 +37,9 @@ body {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
 }
 
@@ -165,7 +167,7 @@ button {
 .topbar {
   position: relative;
   display: grid;
-  grid-template-columns: auto minmax(480px, 1fr) auto;
+  grid-template-columns: auto auto minmax(360px, 1fr) auto;
   gap: 16px;
   align-items: center;
   padding: 12px 16px;
@@ -178,6 +180,33 @@ button {
   align-items: center;
   gap: 10px;
   font-size: 18px;
+}
+
+.view-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  width: 202px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg);
+}
+
+.view-tab {
+  min-width: 0;
+  height: 30px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.view-tab.active {
+  background: #2a3a43;
+  color: var(--ink);
 }
 
 .brand-mark {
@@ -380,6 +409,17 @@ button {
   padding: 10px 12px;
 }
 
+.app-view {
+  flex: 1;
+  min-height: 0;
+}
+
+.home-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .hero-card {
   position: relative;
   flex: 1;
@@ -489,6 +529,22 @@ button {
 }
 
 .mode-badge.road .mode-dot {
+  background: var(--road);
+}
+
+.mode-dot.flight {
+  background: var(--flight);
+}
+
+.mode-dot.rail {
+  background: var(--rail);
+}
+
+.mode-dot.ship {
+  background: var(--ship);
+}
+
+.mode-dot.road {
   background: var(--road);
 }
 
@@ -910,6 +966,403 @@ button {
   color: #c9d4d8;
 }
 
+/* ---------- 数据看板 / 成就 ---------- */
+
+.dashboard-view,
+.achievements-view {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  overflow: auto;
+  padding: 4px;
+  scrollbar-width: thin;
+}
+
+.page-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 2px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.page-head h2 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.page-head p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.page-summary {
+  flex: 0 0 auto;
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metric-card {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.metric-card span,
+.metric-card small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.metric-card strong {
+  color: var(--ink);
+  font-size: 24px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.insight-panel {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.panel-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.panel-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.mode-breakdown {
+  display: grid;
+  gap: 10px;
+}
+
+.mode-row {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) 32px;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.mode-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.mode-bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--panel-strong);
+}
+
+.mode-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--rail), var(--flight), var(--accent));
+}
+
+.mode-row strong {
+  color: var(--ink);
+  font-size: 12px;
+  text-align: right;
+}
+
+.timeline-bars {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  align-items: end;
+  min-height: 190px;
+}
+
+.timeline-item {
+  display: grid;
+  grid-template-rows: 1fr auto auto auto;
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.timeline-track {
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  min-height: 112px;
+  border-radius: 8px;
+  background: var(--panel-strong);
+}
+
+.timeline-track i {
+  display: block;
+  width: 100%;
+  border-radius: 8px;
+  background: linear-gradient(180deg, var(--accent), var(--rail));
+}
+
+.timeline-item strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.timeline-item small {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rank-list {
+  display: grid;
+  gap: 8px;
+}
+
+.rank-item {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+}
+
+.rank-no {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: #2a3a43;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.rank-no.flight {
+  background: rgba(77, 155, 255, 0.2);
+  color: #8fc1ff;
+}
+
+.rank-no.rail {
+  background: rgba(47, 185, 143, 0.2);
+  color: #7fd8b8;
+}
+
+.rank-no.ship {
+  background: rgba(167, 139, 250, 0.2);
+  color: #c8b6ff;
+}
+
+.rank-no.road {
+  background: rgba(224, 138, 60, 0.2);
+  color: #ffc08a;
+}
+
+.rank-item div {
+  min-width: 0;
+}
+
+.rank-item strong,
+.rank-item small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rank-item strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.rank-item small,
+.rank-item > span:last-child {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.rank-item > span:last-child {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.empty-copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.achievement-progress {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.progress-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.progress-copy strong {
+  font-size: 20px;
+}
+
+.progress-copy span {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+.progress-meter,
+.mini-meter {
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--panel-strong);
+}
+
+.progress-meter {
+  height: 10px;
+}
+
+.mini-meter {
+  height: 6px;
+}
+
+.progress-meter i,
+.mini-meter i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--rail), var(--accent));
+}
+
+.achievement-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.achievement-card {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.achievement-card.locked {
+  opacity: 0.66;
+}
+
+.achievement-card.unlocked {
+  border-color: rgba(47, 185, 143, 0.55);
+}
+
+.achievement-mark {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 8px;
+  background: #2a3a43;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.achievement-card.unlocked .achievement-mark {
+  background: linear-gradient(135deg, var(--rail), var(--accent));
+}
+
+.achievement-body {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.achievement-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.achievement-title strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.achievement-title span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.achievement-body p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 /* ---------- Leaflet 控件适配深色 ---------- */
 
 .leaflet-control-zoom a {
@@ -941,12 +1394,17 @@ button {
 
 @media (max-width: 1080px) {
   .topbar {
-    grid-template-columns: 1fr;
+    grid-template-columns: auto minmax(0, 1fr);
     gap: 10px;
     padding: 10px 12px;
   }
 
+  .view-tabs {
+    justify-self: start;
+  }
+
   .top-actions {
+    grid-column: 1 / -1;
     position: static;
     width: 100%;
     justify-content: flex-end;
@@ -954,6 +1412,7 @@ button {
   }
 
   .quick-add {
+    grid-column: 1 / -1;
     grid-template-columns: minmax(0, 1fr) 92px 132px 78px;
   }
 
@@ -963,6 +1422,15 @@ button {
 
   .flight-query-grid,
   .station-pick {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-layout,
+  .achievement-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -985,6 +1453,16 @@ button {
   .brand {
     gap: 8px;
     font-size: 16px;
+  }
+
+  .view-tabs {
+    justify-self: end;
+    width: min(196px, 100%);
+  }
+
+  .view-tab {
+    height: 28px;
+    font-size: 11px;
   }
 
   .brand-mark {
@@ -1038,6 +1516,10 @@ button {
   .main {
     gap: 8px;
     padding: 8px;
+  }
+
+  .home-view {
+    gap: 8px;
   }
 
   .hero-card {
@@ -1180,6 +1662,68 @@ button {
 
   .trip-meta {
     font-size: 10px;
+  }
+
+  .dashboard-view,
+  .achievements-view {
+    gap: 8px;
+    padding: 0;
+  }
+
+  .page-head {
+    align-items: start;
+    padding-bottom: 8px;
+  }
+
+  .page-head h2 {
+    font-size: 18px;
+  }
+
+  .page-summary {
+    font-size: 16px;
+  }
+
+  .metric-grid {
+    gap: 8px;
+  }
+
+  .metric-card,
+  .insight-panel,
+  .achievement-progress,
+  .achievement-card {
+    padding: 10px;
+  }
+
+  .metric-card strong {
+    font-size: 20px;
+  }
+
+  .timeline-bars {
+    min-height: 150px;
+    gap: 5px;
+  }
+
+  .timeline-track {
+    min-height: 84px;
+  }
+
+  .rank-item {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .rank-item > span:last-child {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  .achievement-card {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .achievement-mark {
+    width: 40px;
+    height: 40px;
   }
 
   .settings-modal {

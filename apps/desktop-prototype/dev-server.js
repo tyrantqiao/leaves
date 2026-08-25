@@ -1,6 +1,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const zlib = require("zlib");
 
 const ticketService = require("./server/ticket-service");
 const stationService = require("./server/station-service");
@@ -45,6 +46,34 @@ const contentTypes = {
   ".json": "application/json; charset=utf-8",
   ".geojson": "application/geo+json; charset=utf-8"
 };
+const gzipExtensions = new Set([".html", ".css", ".js", ".json", ".geojson", ".svg"]);
+
+function staticCacheControl(pathname) {
+  if (pathname === "/index.html") return "no-store";
+  if (!isProduction) return "no-store";
+  if (pathname.startsWith("/vendor/")) return "public, max-age=31536000, immutable";
+  return "public, max-age=300, stale-while-revalidate=86400";
+}
+
+function writeStaticResponse(request, response, pathname, body, contentType) {
+  const ext = path.extname(pathname);
+  const acceptsGzip = String(request.headers["accept-encoding"] || "").includes("gzip");
+  const headers = {
+    "Content-Type": contentType,
+    "Cache-Control": staticCacheControl(pathname)
+  };
+  let payload = Buffer.isBuffer(body) ? body : Buffer.from(String(body), "utf8");
+
+  if (acceptsGzip && payload.length > 1024 && gzipExtensions.has(ext)) {
+    payload = zlib.gzipSync(payload);
+    headers["Content-Encoding"] = "gzip";
+    headers.Vary = "Accept-Encoding";
+  }
+
+  headers["Content-Length"] = payload.length;
+  response.writeHead(200, headers);
+  response.end(payload);
+}
 
 // 12306 API 路由表：路径 → { method, handler(args) }
 const API_ROUTES = {
@@ -477,20 +506,17 @@ const server = http.createServer(async (request, response) => {
           "</head>",
           `<script>window.LEAVES_API_BASE = "http://${host}:${port}";<\/script></head>`
         );
-      response.writeHead(200, {
-        "Content-Type": contentTypes[".html"] || "text/html; charset=utf-8",
-        "Cache-Control": "no-store"
-      });
-      response.end(html);
+      writeStaticResponse(request, response, pathname, html, contentTypes[".html"] || "text/html; charset=utf-8");
       return;
     }
 
-    response.writeHead(200, {
-      "Content-Type": contentTypes[path.extname(filePath)] || "application/octet-stream",
-      // 原型开发阶段禁用缓存，避免用户看到旧版本页面/资源
-      "Cache-Control": "no-store"
-    });
-    response.end(data);
+    writeStaticResponse(
+      request,
+      response,
+      pathname,
+      data,
+      contentTypes[path.extname(filePath)] || "application/octet-stream"
+    );
   });
 });
 
