@@ -32,17 +32,15 @@ Useful environment variables:
 - `LEAVES_MAX_USERS`: account cap, default `5`.
 - `LEAVES_SESSION_DAYS`: session cookie lifetime.
 - `LEAVES_READ_ONLY`: set to `1` for read-only demo mode.
-- `LEAVES_OPENSKY_CLIENT_ID`, `LEAVES_OPENSKY_CLIENT_SECRET`, `LEAVES_OPENSKY_PROXY`: optional server-level OpenSky credentials/proxy.
 
 ## Important Files
 
 - `apps/desktop-prototype/index.html`: app shell and modal markup.
 - `apps/desktop-prototype/styles.css`: layout, responsive behavior, and visual system.
 - `apps/desktop-prototype/app.js`: client state, rendering, trip CRUD, map behavior, rail and flight workflows.
-- `apps/desktop-prototype/dev-server.js`: static server, auth/session APIs, data APIs, and provider proxy routes.
+- `apps/desktop-prototype/dev-server.js`: static server, auth/session APIs, data APIs, and 12306 helper routes.
 - `apps/desktop-prototype/server/auth-service.js`: username/password auth, password hashing, sessions, and max-user enforcement.
 - `apps/desktop-prototype/server/ticket-service.js`: 12306 station, train-route, train-number, transfer, and current-time helpers.
-- `apps/desktop-prototype/server/flight-service.js`: airline dictionary, airport dictionary, local flight schedules, OpenSky REST support.
 - `apps/desktop-prototype/vendor/`: checked-in offline browser assets; avoid regenerating or replacing vendor files unless that is the explicit task.
 - `docs/AUTH_SQLITE_PLAN.md`: planned SQLite auth/storage design; do not describe it as implemented.
 
@@ -52,14 +50,13 @@ Useful environment variables:
 - Mobile must follow a one-screen interaction model: compact top quick-add, map-first current trip, and a short bottom trip strip in the same viewport.
 - Do not reintroduce the realtime remaining-ticket UI. Public `/api/12306/query-tickets` and `/api/12306/query-ticket-price` routes are intentionally absent.
 - Railway flows should focus on station search, train-route lookup, train-number conversion, transfer lookup, and manual fallback.
-- Flight lookup can use the local timetable first and OpenSky as an optional authenticated provider. The frontend must never read back a saved OpenSky secret.
+- Flight registration is manual-only. Do not add OCR, photo upload, local timetable lookup, or OpenSky-backed flight lookup unless the user explicitly changes this product direction.
 
 ## Data And Security Rules
 
 - Keep the account cap at 5 unless the user explicitly changes the product requirement.
 - Do not store plaintext passwords. Password handling belongs in `auth-service.js`; preserve salted `scrypt` hashing and timing-safe verification.
 - Keep trip data scoped by user. Browser storage keys and server files must not mix trips between accounts.
-- Do not echo secrets to the browser. OpenSky `clientSecret` is write-only from the frontend perspective.
 - Treat files under `apps/desktop-prototype/data/` as local runtime data, not source fixtures.
 
 ## Coding Notes

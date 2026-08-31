@@ -6,14 +6,14 @@ Leaves 是一个 Windows 优先的个人出行记录软件。它的目标不是�
 
 > ✅ = 已在桌面原型中实现并验证；⏳ = 待正式 Tauri 版本落地。
 
-- ✅ 快速登记：输入航班号、铁路车次号、起终点，自动识别交通方式并生成草稿（票据截图 OCR 待 Phase 2）。
+- ✅ 快速登记：输入航班号、铁路车次号、起终点，自动识别交通方式并生成草稿。
 - ✅ 行程时间线：按日期回看航班、铁路、道路记录，支持方式筛选。
 - ✅ 地图回顾：Leaflet 真实地图上显示航线弧线、铁路/公路线、城市点位，支持单程聚焦与重置视角。
 - ✅ 账号入口：进入 Leaves 前先登录或注册，行程按账号隔离保存。
 - ✅ 本地优先：账号维度 localStorage 缓存 + 本地服务文件持久化（正式版替换为 SQLite）。
 - ✅ 行程管理：新增、内联编辑、删除行程，JSON 一键导入导出。
 - ✅ 12306 铁路查询：登记车次后通过经停站选择补全真实发到时刻（逻辑移植自 mcp-server-12306）。
-- ⏳ 数据源可替换：通过 provider adapter 接入航班、铁路、地图、OCR 等能力。
+- ⏳ 数据源可替换：通过 provider adapter 接入铁路、地图等能力；航班信息保持用户手动登记。
 
 ## 当前产出
 
@@ -90,10 +90,6 @@ apps/desktop-prototype/index.html
 | `/api/12306/train-route` | POST | 经停站与时刻表 |
 | `/api/12306/train-no` | POST | 车次号 → 官方唯一编号 |
 | `/api/12306/current-time` | GET | 当前时间 |
-| `/api/flight/search` | POST | 航班号 + 乘机日查询，返回航司、起降机场、机场代码与时刻 |
-| `/api/user/settings/opensky` | GET/PUT | 当前账号的 OpenSky clientId/clientSecret 维护（secret 不回显） |
-| `/api/user/settings/opensky/test` | POST | 使用 OpenSky OAuth2 client credentials 换 token 测试 |
-| `/api/opensky/request` | POST | 受控代理 OpenSky REST：states、flights、tracks |
 
 前端集成：
 
@@ -102,9 +98,7 @@ apps/desktop-prototype/index.html
 - **距离兜底**：保存时按起讫站坐标计算直线距离（内置 90+ 城市/车站坐标表，支持城市级回退），无接口里程数据时自动补上。
 - **编辑表单联动**：草稿态编辑铁路车次时，若查询到经停站，起点/终点自动切换为经停站下拉选择（带成功提示）；查询不到则保持文本输入。
 - **自动补全**：查询到经停站后按用户选择的上下车站写入真实发到时刻；无法查询时保留手动补录。
-- **航班补全**：登记航班后可在 Hero 卡片点击“航班查询”，输入航班号与乘机日查询；当前内置本地航班表可离线补全 `HO2274` 在 `2026-07-20` 的惠州平潭 → 上海浦东、21:05 → 23:25 信息，未收录航班会优先用当前账号保存的 OpenSky REST 凭证查询，到离港查询仍无结果时回退到航司识别和手动补录。
-- **OpenSky 凭证维护**：点击顶栏用户名进入账号设置，可保存/测试/清除 OpenSky `clientId` 与 `clientSecret`；后端使用 OAuth2 client credentials 换取 Bearer token 并做 30 分钟级缓存，前端不会读取已保存的 `clientSecret`。如果本机代理/VPN 使用 fake-ip，设置里可填写 `Proxy URL`（如 `http://127.0.0.1:7890`），也可通过 `LEAVES_HTTPS_PROXY` / `HTTPS_PROXY` 环境变量配置。
-- **OpenSky 网络排障**：测试时报 `connect EACCES 198.18.x.x:443` 通常表示 OpenSky 域名被代理软件解析到了 fake-ip，但 Node 后端没有走代理；填写账号设置中的 `Proxy URL` 后重试，或设置代理环境变量并重启 `npm start`。
+- **航班登记**：登记航班后可在 Hero 卡片点击“航班登记”，由用户填写航司、航班号、起飞日期、起飞地、降落地和可选起降时间；不依赖 OCR、照片上传、远端航班 provider 或 OpenSky。
 - **查询日期限制**：12306 查询日期仅支持今天到 14 天后；登记日期保存真实出行日，可填写历史日期。
 - **账号与本地持久化**：进入应用前先通过 `/api/auth/register` 或 `/api/auth/login` 建立 session；行程数据双写保存到当前账号自己的浏览器 localStorage key 和本地文件 `apps/desktop-prototype/data/users/<user-id>.trips.json`（通过 `/api/data/trips` 读写，重启/换浏览器不丢）。
 
@@ -116,7 +110,7 @@ apps/desktop-prototype/index.html
 - Frontend: React + TypeScript
 - Local data: SQLite
 - Map: MapLibre GL JS
-- Provider layer: FlightAware/OpenSky/rail provider/manual provider adapters
+- Provider layer: rail provider/manual provider adapters
 
 ## 下一步
 

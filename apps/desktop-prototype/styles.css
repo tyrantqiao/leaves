@@ -293,7 +293,7 @@ button {
   font-weight: 700;
 }
 
-.user-name-button {
+.user-name {
   display: inline-flex;
   align-items: center;
   min-height: 28px;
@@ -305,14 +305,10 @@ button {
   overflow: hidden;
 }
 
-.user-name-button span {
+.user-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.user-name-button:hover span {
-  color: #ffffff;
 }
 
 .ghost-button {
@@ -331,52 +327,6 @@ button {
 .ghost-button.small {
   padding: 5px 10px;
   font-size: 12px;
-}
-
-.settings-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 1100;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(5, 9, 11, 0.72);
-}
-
-.settings-card {
-  display: grid;
-  gap: 16px;
-  width: min(480px, 100%);
-  padding: 22px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
-}
-
-.settings-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.settings-head h2,
-.settings-form h3 {
-  margin: 0;
-}
-
-.settings-head h2 {
-  font-size: 20px;
-}
-
-.settings-form {
-  display: grid;
-  gap: 12px;
-}
-
-.settings-form h3 {
-  font-size: 15px;
 }
 
 .danger-button.small {
@@ -677,20 +627,15 @@ button {
   gap: 12px;
 }
 
-.flight-query-grid {
+.flight-registration-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   align-items: end;
 }
 
-.flight-query-grid .edit-field {
+.flight-registration-grid .edit-field {
   grid-template-columns: 56px 1fr;
-}
-
-.flight-query-grid .primary-button {
-  height: 34px;
-  padding: 0 18px;
 }
 
 .ticket-title {
@@ -1420,7 +1365,7 @@ button {
     font-size: 32px;
   }
 
-  .flight-query-grid,
+  .flight-registration-grid,
   .station-pick {
     grid-template-columns: 1fr;
   }
@@ -1481,7 +1426,7 @@ button {
     padding-left: 8px;
   }
 
-  .user-name-button {
+  .user-name {
     max-width: 100%;
   }
 
@@ -1595,7 +1540,7 @@ button {
 
   .edit-field,
   .station-date .edit-field,
-  .flight-query-grid .edit-field {
+  .flight-registration-grid .edit-field {
     grid-template-columns: 58px minmax(0, 1fr);
     gap: 8px;
   }
@@ -1726,18 +1671,6 @@ button {
     height: 40px;
   }
 
-  .settings-modal {
-    align-items: start;
-    padding: 12px;
-    overflow: auto;
-  }
-
-  .settings-card {
-    max-height: calc(100dvh - 24px);
-    padding: 16px;
-    border-radius: 10px;
-    overflow: auto;
-  }
 }
 
 @media (max-width: 720px) and (max-height: 700px) {

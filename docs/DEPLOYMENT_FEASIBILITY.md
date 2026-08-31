@@ -27,7 +27,7 @@
 - 没有用户登录、权限、账号隔离。
 - 数据不是数据库级持久化，无法支撑多用户。
 - API CORS 当前偏开发模式，公开服务需要收紧。
-- 12306、OpenSky、地图瓦片等外部数据源需要合规和稳定性评估。
+- 12306、地图瓦片等外部数据源需要合规和稳定性评估；航班信息采用用户手动登记，不接 OpenSky 或 OCR。
 - 没有 HTTPS、反向代理、进程守护、日志、监控、备份策略。
 
 ## 3. 推荐域名规划
@@ -86,7 +86,6 @@ Web / Tauri Client
   -> HTTPS Reverse Proxy
   -> API Service
   -> PostgreSQL / SQLite single-user mode
-  -> Object Storage
   -> Provider Adapters
   -> Queue / Scheduled Jobs
 ```
@@ -98,7 +97,7 @@ Web / Tauri Client
 - 桌面端：Tauri
 - API：Node.js/Fastify、NestJS，或 Rust/Axum
 - 数据库：PostgreSQL；个人单用户可先 SQLite
-- 附件：服务器本地目录、S3/R2/OSS
+- 附件：暂不规划上传能力，减少服务器存储和隐私压力
 - 反向代理：Caddy 或 Nginx
 - HTTPS：Let's Encrypt 自动证书
 - 进程管理：Docker Compose、systemd 或 PM2
@@ -211,8 +210,8 @@ packages/
 
 航班：
 
-- OpenSky 可做低成本验证，但覆盖率、额度和历史数据能力有限。
-- 商业化或稳定服务建议接入 FlightAware AeroAPI 等正式商业接口。
+- 当前采用用户手动登记，不接 OpenSky、FlightAware 或 OCR。
+- 远端服务器不承担照片上传、图像识别或航班 provider 查询压力。
 
 ### 5.8 隐私与合规
 
@@ -223,7 +222,7 @@ packages/
 - 数据备份和恢复
 - 最小化采集
 - 管理员不可随意查看用户私人行程
-- 附件票据可能包含身份证、订单号、手机号等敏感信息
+- 不上传票据、登机牌、截图或照片，优先降低敏感信息采集面
 
 如果服务器部署在中国大陆，并使用 `tyrantqiao.com` 对外提供网站服务，通常需要：
 
@@ -263,7 +262,6 @@ SQLite/PostgreSQL
 2-4 vCPU
 4-8 GB RAM
 PostgreSQL managed instance
-Object Storage
 Redis optional
 日志和监控
 ```
@@ -360,7 +358,6 @@ pm2 save
 - SQLite 存储。
 - 管理员登录。
 - 行程 CRUD API。
-- 附件上传。
 - 数据备份导出。
 - Provider 凭证环境变量化。
 

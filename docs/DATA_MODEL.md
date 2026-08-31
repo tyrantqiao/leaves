@@ -86,7 +86,7 @@ geometries (
 
 ### Attachment
 
-票据、登机牌、发票、截图、照片等。
+暂不实现。当前产品方向不上传票据、登机牌、截图或照片，也不做 OCR；航班信息由用户手动登记。
 
 ```sql
 attachments (

@@ -5,7 +5,6 @@ const zlib = require("zlib");
 
 const ticketService = require("./server/ticket-service");
 const stationService = require("./server/station-service");
-const flightService = require("./server/flight-service");
 const { createAuthService } = require("./server/auth-service");
 
 const root = __dirname;
@@ -81,8 +80,7 @@ const API_ROUTES = {
   "/api/12306/query-transfer": { method: "POST", handler: ticketService.queryTransferValidated },
   "/api/12306/train-route": { method: "POST", handler: ticketService.getTrainRouteStationsValidated },
   "/api/12306/train-no": { method: "POST", handler: ticketService.getTrainNoByTrainCodeValidated },
-  "/api/12306/current-time": { method: "GET", handler: ticketService.getCurrentTimeValidated },
-  "/api/flight/search": { method: "POST", handler: flightService.searchFlightValidated }
+  "/api/12306/current-time": { method: "GET", handler: ticketService.getCurrentTimeValidated }
 };
 
 function sendJson(response, statusCode, payload) {
@@ -147,59 +145,6 @@ function tripsFileForUser(user) {
   return path.join(DATA_DIR, "users", `${user.id}.trips.json`);
 }
 
-function settingsFileForUser(user) {
-  return path.join(DATA_DIR, "users", `${user.id}.settings.json`);
-}
-
-function readUserSettings(user) {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(settingsFileForUser(user), "utf8"));
-    return {
-      opensky:
-        parsed && typeof parsed.opensky === "object" && parsed.opensky
-          ? {
-              clientId: String(parsed.opensky.clientId || ""),
-              clientSecret: String(parsed.opensky.clientSecret || ""),
-              proxyUrl: String(parsed.opensky.proxyUrl || ""),
-              updatedAt: parsed.opensky.updatedAt || null
-            }
-          : null
-    };
-  } catch (e) {
-    return { opensky: null };
-  }
-}
-
-function writeUserSettings(user, settings) {
-  const file = settingsFileForUser(user);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tempFile = `${file}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(tempFile, JSON.stringify(settings, null, 2));
-  fs.renameSync(tempFile, file);
-}
-
-function publicUserSettings(settings) {
-  const opensky = settings.opensky || null;
-  return {
-    opensky: {
-      clientId: opensky?.clientId || "",
-      proxyUrl: opensky?.proxyUrl || "",
-      hasClientSecret: Boolean(opensky?.clientSecret),
-      updatedAt: opensky?.updatedAt || null
-    }
-  };
-}
-
-function currentApiUser(request, response) {
-  const user = authService.currentUser(request);
-  if (!user) {
-    response.setHeader("Set-Cookie", authService.clearCookie());
-    sendJson(response, 401, { success: false, error: "请先登录" });
-    return null;
-  }
-  return user;
-}
-
 async function handleAuthRequest(request, response, pathname) {
   if (pathname === "/api/auth/me") {
     if (request.method !== "GET") {
@@ -261,115 +206,6 @@ async function handleApiRequest(request, response, pathname, searchParams) {
 
   if (pathname.startsWith("/api/auth/")) {
     return handleAuthRequest(request, response, pathname);
-  }
-
-  if (pathname === "/api/user/settings") {
-    const user = currentApiUser(request, response);
-    if (!user) return true;
-
-    if (request.method !== "GET") {
-      sendJson(response, 405, { success: false, error: "仅支持 GET 请求" });
-      return true;
-    }
-    sendJson(response, 200, { success: true, settings: publicUserSettings(readUserSettings(user)) });
-    return true;
-  }
-
-  if (pathname === "/api/user/settings/opensky") {
-    const user = currentApiUser(request, response);
-    if (!user) return true;
-
-    if (request.method === "GET") {
-      sendJson(response, 200, { success: true, opensky: publicUserSettings(readUserSettings(user)).opensky });
-      return true;
-    }
-
-    if (request.method === "PUT") {
-      if (readOnly) {
-        sendJson(response, 403, { success: false, error: "当前服务处于只读演示模式" });
-        return true;
-      }
-      try {
-        const body = await readJsonBody(request);
-        const settings = readUserSettings(user);
-        if (body.clear) {
-          settings.opensky = null;
-          writeUserSettings(user, settings);
-          sendJson(response, 200, { success: true, opensky: publicUserSettings(settings).opensky });
-          return true;
-        }
-
-        const clientId = String(body.clientId || "").trim();
-        const clientSecret = String(body.clientSecret || "").trim();
-        const proxyUrl = String(body.proxyUrl || "").trim();
-        const previousSecret = settings.opensky?.clientSecret || "";
-        if (!clientId) {
-          sendJson(response, 400, { success: false, error: "clientId 不能为空" });
-          return true;
-        }
-        if (!clientSecret && !previousSecret) {
-          sendJson(response, 400, { success: false, error: "clientSecret 不能为空" });
-          return true;
-        }
-
-        settings.opensky = {
-          clientId,
-          clientSecret: clientSecret || previousSecret,
-          proxyUrl,
-          updatedAt: new Date().toISOString()
-        };
-        writeUserSettings(user, settings);
-        sendJson(response, 200, { success: true, opensky: publicUserSettings(settings).opensky });
-      } catch (e) {
-        sendJson(response, 400, { success: false, error: e.message });
-      }
-      return true;
-    }
-
-    sendJson(response, 405, { success: false, error: "仅支持 GET/PUT" });
-    return true;
-  }
-
-  if (pathname === "/api/user/settings/opensky/test") {
-    const user = currentApiUser(request, response);
-    if (!user) return true;
-    if (request.method !== "POST") {
-      sendJson(response, 405, { success: false, error: "仅支持 POST 请求" });
-      return true;
-    }
-    try {
-      const body = await readJsonBody(request);
-      const settings = readUserSettings(user);
-      const credentials = {
-        clientId: String(body.clientId || settings.opensky?.clientId || "").trim(),
-        clientSecret: String(body.clientSecret || settings.opensky?.clientSecret || "").trim(),
-        proxyUrl: String(body.proxyUrl || settings.opensky?.proxyUrl || "").trim()
-      };
-      const result = await flightService.testOpenSkyCredentialsValidated(credentials);
-      sendJson(response, result.success ? 200 : 400, result);
-    } catch (e) {
-      sendJson(response, 400, { success: false, error: e.message, ...(e.extra || {}) });
-    }
-    return true;
-  }
-
-  if (pathname === "/api/opensky/request") {
-    const user = currentApiUser(request, response);
-    if (!user) return true;
-    if (request.method !== "POST") {
-      sendJson(response, 405, { success: false, error: "仅支持 POST 请求" });
-      return true;
-    }
-    try {
-      const body = await readJsonBody(request);
-      const result = await flightService.openskyRestRequestValidated(body, {
-        openskyCredentials: readUserSettings(user).opensky
-      });
-      sendJson(response, 200, result);
-    } catch (e) {
-      sendJson(response, 500, { success: false, error: `OpenSky 请求失败: ${e.message}` });
-    }
-    return true;
   }
 
   // 行程数据持久化：登录后按用户读写自己的文件，避免账号之间共享同一份 trips.json
@@ -453,10 +289,6 @@ async function handleApiRequest(request, response, pathname, searchParams) {
   }
 
   try {
-    if (pathname === "/api/flight/search") {
-      const user = authService.currentUser(request);
-      if (user) args.openskyCredentials = readUserSettings(user).opensky;
-    }
     const result = await route.handler(args);
     sendJson(response, 200, result);
   } catch (e) {

@@ -13,7 +13,7 @@ Tauri desktop shell
   -> Map rendering
 ```
 
-Tauri 负责 Windows 桌面能力、文件访问、系统托盘和打包。React 负责交互界面。SQLite 保存用户行程、地点、轨迹、附件和 provider 原始响应。
+Tauri 负责 Windows 桌面能力、文件访问、系统托盘和打包。React 负责交互界面。SQLite 保存用户行程、地点、轨迹和必要的 provider 原始响应。
 
 ## 2. 模块拆分
 
@@ -39,11 +39,9 @@ src/
     stats/
     settings/
   providers/
-    flight/
     rail/
     road/
     map/
-    ocr/
   storage/
     migrations/
     repositories/
@@ -79,9 +77,9 @@ export interface TripProvider {
 
 ### 航班
 
-- 正式商业数据源优先选择 FlightAware AeroAPI 等合规接口。
-- OpenSky 可用于技术验证和低成本轨迹补全，但覆盖率、额度、调用方式需要单独评估。
-- 不建议把抓取 Flightradar24 页面作为产品数据源。
+- 采用用户手动登记：航司、航班号、日期、起飞地、降落地和可选起降时间。
+- 不接入 OCR、照片上传、OpenSky 或其他远端航班 provider，避免服务器算力、存储和外部额度压力。
+- 可保留航班号格式识别和航司代码本地提示，但最终信息以用户确认为准。
 
 ### 铁路
 
@@ -93,7 +91,7 @@ export interface TripProvider {
 
 - 先通过起点、终点、时间、费用、备注记录。
 - 地图路线可以由地图 routing provider 补全为近似线路。
-- 后续支持票据截图 OCR、邮件导入、CSV 导入。
+- 后续可支持邮件导入、CSV 导入等低服务器压力的文本型导入方式。
 
 ## 4. 地图方案
 
@@ -111,12 +109,10 @@ MVP 不要求真实底图离线。先保证路线数据结构正确，后续再�
 
 - 默认所有数据保存在本机。
 - 外部 provider 的原始响应单独保存，便于排查和重算。
-- 附件放在应用数据目录，数据库只保存路径和元信息。
 - 用户必须能导出 JSON/CSV，并能完整备份本地数据库。
 
 ## 6. 风险
 
 - 航班/铁路数据源成本和稳定性。
 - 国内地图和海外地图的服务可用性差异。
-- 票据 OCR 的准确率和隐私风险。
 - 航班号/车次号本身不唯一，通常需要日期才能准确匹配。
