@@ -70,16 +70,20 @@ const tileSources = [
 const places = {
   "北京": { lat: 39.9042, lng: 116.4074 },
   "北京首都": { lat: 40.0801, lng: 116.5846 },
+  "北京首都机场": { lat: 40.0801, lng: 116.5846 },
   "北京南": { lat: 39.8652, lng: 116.3785 },
   "上海": { lat: 31.2304, lng: 121.4737 },
   "上海虹桥": { lat: 31.1968, lng: 121.3260 },
+  "上海虹桥机场": { lat: 31.1968, lng: 121.3260 },
   "上海南": { lat: 31.1548, lng: 121.4299 },
   "上海浦东": { lat: 31.1443, lng: 121.8083 },
+  "上海浦东机场": { lat: 31.1443, lng: 121.8083 },
   "惠州": { lat: 23.1118, lng: 114.4168 },
   "惠州平潭": { lat: 23.0498, lng: 114.5997 },
   "惠州平潭机场": { lat: 23.0498, lng: 114.5997 },
   "杭州": { lat: 30.2741, lng: 120.1551 },
   "杭州萧山": { lat: 30.2295, lng: 120.4345 },
+  "杭州萧山机场": { lat: 30.2295, lng: 120.4345 },
   "杭州东": { lat: 30.2891, lng: 120.2120 },
   "杭州南": { lat: 30.1715, lng: 120.3100 },
   "广州": { lat: 23.1291, lng: 113.2644 },
@@ -165,10 +169,36 @@ const places = {
   "黄山": { lat: 29.7147, lng: 118.3376 }
 };
 
+const commonAirports = [
+  { city: "北京", name: "北京首都机场", place: "北京首都机场" },
+  { city: "上海", name: "上海虹桥机场", place: "上海虹桥机场" },
+  { city: "上海", name: "上海浦东机场", place: "上海浦东机场" },
+  { city: "惠州", name: "惠州平潭机场", place: "惠州平潭机场" },
+  { city: "杭州", name: "杭州萧山机场", place: "杭州萧山机场" },
+  { city: "广州", name: "广州白云机场", place: "广州" },
+  { city: "深圳", name: "深圳宝安机场", place: "深圳" },
+  { city: "成都", name: "成都天府机场", place: "成都" },
+  { city: "成都", name: "成都双流机场", place: "成都" },
+  { city: "西安", name: "西安咸阳机场", place: "西安" },
+  { city: "南京", name: "南京禄口机场", place: "南京" },
+  { city: "武汉", name: "武汉天河机场", place: "武汉" },
+  { city: "重庆", name: "重庆江北机场", place: "重庆" },
+  { city: "桂林", name: "桂林两江机场", place: "桂林两江" }
+];
+
+const airportAliasMap = commonAirports.reduce((map, airport) => {
+  [airport.name, airport.name.replace(/机场$/, ""), airport.name.replace(/国际机场$/, ""), airport.city].forEach((alias) => {
+    if (alias && !map.has(alias)) map.set(alias, airport);
+  });
+  return map;
+}, new Map());
+
 /** 站名 → 坐标：精确匹配车站/城市，找不到时去掉方位后缀回退到城市（如 合肥南→合肥）。 */
 function resolvePlace(name) {
   if (!name) return null;
   if (places[name]) return places[name];
+  const airport = airportAliasMap.get(name);
+  if (airport && places[airport.place]) return places[airport.place];
   const candidates = [
     name.replace(/站$/, ""),
     name.replace(/(南|北|东|西|虹桥|机场)$/, ""),
@@ -1049,6 +1079,12 @@ function extractTimeRange(text) {
   };
 }
 
+function timeInputValue(value) {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return "";
+  return `${match[1].padStart(2, "0")}:${match[2]}`;
+}
+
 function inferRoute(text, mode) {
   // 支持 "上海到杭州"、"惠州飞上海浦东"、"惠州平潭--上海浦东" 等分隔符
   const routeMatch = text.match(/(.+?)(?:到|->|--|—|–|至|飞)(.+)/);
@@ -1079,17 +1115,21 @@ function cleanPlace(value) {
 function normalizePlace(value) {
   const trimmed = String(value || "").trim().replace(/T\d+$/i, "");
   if (places[trimmed]) return trimmed;
+  if (airportAliasMap.has(trimmed)) return airportAliasMap.get(trimmed).place;
   const airportSuffixRemoved = trimmed.replace(/国际机场$/, "机场").replace(/机场$/, "");
+  if (airportAliasMap.has(airportSuffixRemoved)) return airportAliasMap.get(airportSuffixRemoved).place;
   if (places[airportSuffixRemoved]) return airportSuffixRemoved;
   if (trimmed.includes("惠州平潭")) return "惠州平潭";
   if (trimmed.includes("浦东")) return "上海浦东";
   if (trimmed.includes("虹桥")) return "上海虹桥";
+  if (trimmed.includes("萧山")) return "杭州萧山";
+  if (trimmed.includes("两江")) return "桂林两江";
   if (trimmed.includes("惠州")) return "惠州";
   if (trimmed.includes("北京")) return "北京";
   if (trimmed.includes("上海")) return "上海";
-  if (trimmed.includes("杭州")) return "杭州";
   if (trimmed.includes("桂林两江")) return "桂林两江";
   if (trimmed.includes("桂林")) return "桂林";
+  if (trimmed.includes("杭州")) return "杭州";
   if (trimmed.includes("广州")) return "广州";
   if (trimmed.includes("深圳")) return "深圳";
   if (trimmed.includes("成都")) return "成都";
@@ -1098,6 +1138,12 @@ function normalizePlace(value) {
   if (trimmed.includes("武汉")) return "武汉";
   if (trimmed.includes("重庆")) return "重庆";
   return trimmed;
+}
+
+function normalizeFlightPlace(value) {
+  const trimmed = String(value || "").trim();
+  if (airportAliasMap.has(trimmed)) return airportAliasMap.get(trimmed).name;
+  return normalizePlace(trimmed);
 }
 
 function estimateDistance(origin, destination) {
@@ -1193,9 +1239,9 @@ function renderMap(visibleTrips) {
     const isActive = trip.id === selectedTripId;
     const route = L.polyline(points, {
       color: modeColors[trip.mode] || "#536268",
-      weight: isActive ? 7 : 5,
-      opacity: isActive ? 0.95 : 0.72,
-      dashArray: trip.mode === "flight" ? "10 12" : undefined,
+      weight: trip.mode === "flight" ? (isActive ? 8 : 6) : (isActive ? 7 : 5),
+      opacity: trip.mode === "flight" ? (isActive ? 0.98 : 0.82) : (isActive ? 0.95 : 0.72),
+      dashArray: undefined,
       className: `map-route route-${trip.mode}${isActive ? " selected" : ""}`
     }).addTo(routeLayer);
 
@@ -1216,10 +1262,25 @@ function renderMap(visibleTrips) {
         className: "trip-marker"
       }).addTo(markerLayer);
 
-      marker.bindTooltip(label, { permanent: isActive, direction: "top", offset: [0, -8] });
+      marker.bindTooltip(label, { permanent: isActive || trip.mode === "flight", direction: "top", offset: [0, -8] });
       marker.on("click", () => selectTrip(trip.id, { focusMap: true }));
       return marker;
     });
+
+    if (trip.mode === "flight" && isActive) {
+      const middlePoint = points[Math.floor(points.length / 2)];
+      endpointMarkers.push(
+        L.marker(middlePoint, {
+          interactive: false,
+          icon: L.divIcon({
+            className: "flight-path-marker",
+            html: "<span>航线</span>",
+            iconSize: [44, 24],
+            iconAnchor: [22, 12]
+          })
+        }).addTo(markerLayer)
+      );
+    }
     markerByTripId.set(trip.id, endpointMarkers);
   });
 
@@ -1368,8 +1429,8 @@ function renderEditForm(trip) {
       ${editField("editOrigin", "起点", `<input id="editOrigin" value="${escapeHtml(trip.origin)}" required>`)}
       ${editField("editDestination", "终点", `<input id="editDestination" value="${escapeHtml(trip.destination)}" required>`)}
       ${editField("editDate", "日期", `<input id="editDate" type="date" value="${escapeHtml(trip.date)}" required>`)}
-      ${editField("editDeparture", "出发", `<input id="editDeparture" value="${escapeHtml(trip.departureTime)}">`)}
-      ${editField("editArrival", "到达", `<input id="editArrival" value="${escapeHtml(trip.arrivalTime)}">`)}
+      ${editField("editDeparture", "出发", `<input id="editDeparture" type="time" value="${escapeHtml(timeInputValue(trip.departureTime))}">`)}
+      ${editField("editArrival", "到达", `<input id="editArrival" type="time" value="${escapeHtml(timeInputValue(trip.arrivalTime))}">`)}
       ${editField("editOperator", "运营方", `<input id="editOperator" value="${escapeHtml(trip.operator)}">`)}
       ${editField("editDistance", "里程(km)", `<input id="editDistance" type="number" min="0" value="${trip.distanceKm || 0}">`)}
       ${editField("editStatus", "状态", statusSelectOptions(trip.status))}
@@ -2009,17 +2070,18 @@ function renderFlightManualForm(trip, targetListEl = null) {
   const listEl = targetListEl || heroOverlay.querySelector(".station-list");
   const prefillFrom = trip.routeUserProvided && trip.origin !== "待确认" ? trip.origin : "";
   const prefillTo = trip.routeUserProvided && trip.destination !== "待确认" ? trip.destination : "";
-  const depTime = trip.departureTime !== "待确认" ? trip.departureTime : "";
-  const arrTime = trip.arrivalTime !== "待确认" ? trip.arrivalTime : "";
+  const depTime = timeInputValue(trip.departureTime);
+  const arrTime = timeInputValue(trip.arrivalTime);
   listEl.innerHTML = `
     <p class="ticket-sub">起飞地和降落地是必填项；起飞/到达时间可稍后补充。</p>
     <div class="station-pick">
-      <label class="edit-field"><span>起飞地</span><input id="flightFrom" placeholder="如 惠州平潭" value="${escapeHtml(prefillFrom)}"></label>
-      <label class="edit-field"><span>降落地</span><input id="flightTo" placeholder="如 上海浦东" value="${escapeHtml(prefillTo)}"></label>
+      <label class="edit-field"><span>起飞地</span>${flightAirportInput("flightFrom", prefillFrom, "如 杭州")}</label>
+      <label class="edit-field"><span>降落地</span>${flightAirportInput("flightTo", prefillTo, "如 上海")}</label>
     </div>
+    ${flightAirportDatalist()}
     <div class="station-pick">
-      <label class="edit-field"><span>起飞</span><input id="flightDepTime" placeholder="HH:MM" value="${escapeHtml(depTime)}"></label>
-      <label class="edit-field"><span>到达</span><input id="flightArrTime" placeholder="HH:MM" value="${escapeHtml(arrTime)}"></label>
+      <label class="edit-field"><span>起飞</span><input id="flightDepTime" type="time" value="${escapeHtml(depTime)}"></label>
+      <label class="edit-field"><span>到达</span><input id="flightArrTime" type="time" value="${escapeHtml(arrTime)}"></label>
     </div>
     <div class="edit-actions">
       <button class="primary-button" data-action="save" type="button">保存</button>
@@ -2051,8 +2113,8 @@ function renderFlightManualForm(trip, targetListEl = null) {
     }
     trip.title = registration.flightNo;
     trip.date = registration.flightDate;
-    trip.origin = normalizePlace(from);
-    trip.destination = normalizePlace(to);
+    trip.origin = normalizeFlightPlace(from);
+    trip.destination = normalizeFlightPlace(to);
     trip.routeUserProvided = true;
     trip.departureTime = listEl.querySelector("#flightDepTime").value.trim() || "待确认";
     trip.arrivalTime = listEl.querySelector("#flightArrTime").value.trim() || "待确认";
@@ -2078,6 +2140,17 @@ function flightAirlineInput(selected = "") {
   const airlines = [...new Set(Object.values(commonFlightAirlines))];
   const options = airlines.map((airline) => `<option value="${escapeHtml(airline)}"></option>`).join("");
   return `<input id="flightOperator" list="flightAirlineList" value="${escapeHtml(selected || "")}" placeholder="如 吉祥航空" required><datalist id="flightAirlineList">${options}</datalist>`;
+}
+
+function flightAirportInput(id, value = "", placeholder = "") {
+  return `<input id="${id}" list="flightAirportList" value="${escapeHtml(value || "")}" placeholder="${escapeHtml(placeholder)}" autocomplete="off" required>`;
+}
+
+function flightAirportDatalist() {
+  const options = commonAirports
+    .map((airport) => `<option value="${escapeHtml(airport.name)}" label="${escapeHtml(airport.city)}"></option>`)
+    .join("");
+  return `<datalist id="flightAirportList">${options}</datalist>`;
 }
 
 function getFlightAirlineFallback(flightNo) {
