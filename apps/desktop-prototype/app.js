@@ -185,22 +185,26 @@ const places = {
   "黄山": { lat: 29.7147, lng: 118.3376 }
 };
 
-const commonAirports = [
-  { city: "北京", name: "北京首都机场", place: "北京首都机场", code: "PEK", aliases: ["首都机场", "北京首都国际机场"] },
-  { city: "上海", name: "上海虹桥机场", place: "上海虹桥机场", code: "SHA", aliases: ["虹桥机场", "上海虹桥国际机场"] },
-  { city: "上海", name: "上海浦东机场", place: "上海浦东机场", code: "PVG", aliases: ["浦东机场", "上海浦东国际机场"] },
-  { city: "惠州", name: "惠州平潭机场", place: "惠州平潭机场", code: "HUZ", aliases: ["平潭机场"] },
-  { city: "杭州", name: "杭州萧山机场", place: "杭州萧山机场", code: "HGH", aliases: ["萧山机场", "杭州萧山国际机场"] },
-  { city: "广州", name: "广州白云机场", place: "广州白云机场", code: "CAN", aliases: ["白云机场", "广州白云国际机场"] },
-  { city: "深圳", name: "深圳宝安机场", place: "深圳宝安机场", code: "SZX", aliases: ["宝安机场", "深圳宝安国际机场"] },
-  { city: "成都", name: "成都天府机场", place: "成都天府机场", code: "TFU", aliases: ["天府机场", "成都天府国际机场"] },
-  { city: "成都", name: "成都双流机场", place: "成都双流机场", code: "CTU", aliases: ["双流机场", "成都双流国际机场"] },
-  { city: "西安", name: "西安咸阳机场", place: "西安咸阳机场", code: "XIY", aliases: ["咸阳机场", "西安咸阳国际机场"] },
-  { city: "南京", name: "南京禄口机场", place: "南京禄口机场", code: "NKG", aliases: ["禄口机场", "南京禄口国际机场"] },
-  { city: "武汉", name: "武汉天河机场", place: "武汉天河机场", code: "WUH", aliases: ["天河机场", "武汉天河国际机场"] },
-  { city: "重庆", name: "重庆江北机场", place: "重庆江北机场", code: "CKG", aliases: ["江北机场", "重庆江北国际机场"] },
-  { city: "桂林", name: "桂林两江机场", place: "桂林两江", code: "KWL", aliases: ["两江机场", "桂林两江国际机场"] }
-];
+const commonAirports = (window.LEAVES_AIRPORTS || []).map((airport) => ({
+  ...airport,
+  place: airport.place || airport.name
+}));
+
+commonAirports.forEach((airport) => {
+  if (!airport || !Number.isFinite(airport.lat) || !Number.isFinite(airport.lng)) return;
+  const coordinate = { lat: airport.lat, lng: airport.lng };
+  [
+    airport.place,
+    airport.name,
+    airport.name?.replace(/国际机场$/, "机场"),
+    airport.name?.replace(/机场$/, ""),
+    airport.code,
+    airport.icao,
+    ...(airport.aliases || [])
+  ].forEach((alias) => {
+    if (alias && !places[alias]) places[alias] = coordinate;
+  });
+});
 
 const airportAliasMap = commonAirports.reduce((map, airport) => {
   [
