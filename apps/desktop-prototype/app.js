@@ -87,17 +87,33 @@ const places = {
   "杭州东": { lat: 30.2891, lng: 120.2120 },
   "杭州南": { lat: 30.1715, lng: 120.3100 },
   "广州": { lat: 23.1291, lng: 113.2644 },
+  "广州白云": { lat: 23.3924, lng: 113.2988 },
+  "广州白云机场": { lat: 23.3924, lng: 113.2988 },
   "广州南": { lat: 22.9892, lng: 113.2695 },
   "深圳": { lat: 22.5431, lng: 114.0579 },
+  "深圳宝安": { lat: 22.6393, lng: 113.8107 },
+  "深圳宝安机场": { lat: 22.6393, lng: 113.8107 },
   "深圳北": { lat: 22.6090, lng: 114.0294 },
   "成都": { lat: 30.5728, lng: 104.0668 },
+  "成都天府": { lat: 30.3190, lng: 104.4450 },
+  "成都天府机场": { lat: 30.3190, lng: 104.4450 },
+  "成都双流": { lat: 30.5785, lng: 103.9471 },
+  "成都双流机场": { lat: 30.5785, lng: 103.9471 },
   "成都东": { lat: 30.6310, lng: 104.1430 },
   "西安": { lat: 34.3416, lng: 108.9398 },
+  "西安咸阳": { lat: 34.4471, lng: 108.7516 },
+  "西安咸阳机场": { lat: 34.4471, lng: 108.7516 },
   "西安北": { lat: 34.3760, lng: 108.9340 },
   "南京": { lat: 32.0603, lng: 118.7969 },
+  "南京禄口": { lat: 31.7359, lng: 118.8665 },
+  "南京禄口机场": { lat: 31.7359, lng: 118.8665 },
   "南京南": { lat: 31.9705, lng: 118.7958 },
   "武汉": { lat: 30.5928, lng: 114.3055 },
+  "武汉天河": { lat: 30.7838, lng: 114.2081 },
+  "武汉天河机场": { lat: 30.7838, lng: 114.2081 },
   "重庆": { lat: 29.5630, lng: 106.5516 },
+  "重庆江北": { lat: 29.7192, lng: 106.6417 },
+  "重庆江北机场": { lat: 29.7192, lng: 106.6417 },
   "重庆北": { lat: 29.6090, lng: 106.5460 },
   "嘉兴": { lat: 30.7461, lng: 120.7555 },
   "虎门": { lat: 22.8266, lng: 113.6730 },
@@ -170,25 +186,38 @@ const places = {
 };
 
 const commonAirports = [
-  { city: "北京", name: "北京首都机场", place: "北京首都机场" },
-  { city: "上海", name: "上海虹桥机场", place: "上海虹桥机场" },
-  { city: "上海", name: "上海浦东机场", place: "上海浦东机场" },
-  { city: "惠州", name: "惠州平潭机场", place: "惠州平潭机场" },
-  { city: "杭州", name: "杭州萧山机场", place: "杭州萧山机场" },
-  { city: "广州", name: "广州白云机场", place: "广州" },
-  { city: "深圳", name: "深圳宝安机场", place: "深圳" },
-  { city: "成都", name: "成都天府机场", place: "成都" },
-  { city: "成都", name: "成都双流机场", place: "成都" },
-  { city: "西安", name: "西安咸阳机场", place: "西安" },
-  { city: "南京", name: "南京禄口机场", place: "南京" },
-  { city: "武汉", name: "武汉天河机场", place: "武汉" },
-  { city: "重庆", name: "重庆江北机场", place: "重庆" },
-  { city: "桂林", name: "桂林两江机场", place: "桂林两江" }
+  { city: "北京", name: "北京首都机场", place: "北京首都机场", code: "PEK", aliases: ["首都机场", "北京首都国际机场"] },
+  { city: "上海", name: "上海虹桥机场", place: "上海虹桥机场", code: "SHA", aliases: ["虹桥机场", "上海虹桥国际机场"] },
+  { city: "上海", name: "上海浦东机场", place: "上海浦东机场", code: "PVG", aliases: ["浦东机场", "上海浦东国际机场"] },
+  { city: "惠州", name: "惠州平潭机场", place: "惠州平潭机场", code: "HUZ", aliases: ["平潭机场"] },
+  { city: "杭州", name: "杭州萧山机场", place: "杭州萧山机场", code: "HGH", aliases: ["萧山机场", "杭州萧山国际机场"] },
+  { city: "广州", name: "广州白云机场", place: "广州白云机场", code: "CAN", aliases: ["白云机场", "广州白云国际机场"] },
+  { city: "深圳", name: "深圳宝安机场", place: "深圳宝安机场", code: "SZX", aliases: ["宝安机场", "深圳宝安国际机场"] },
+  { city: "成都", name: "成都天府机场", place: "成都天府机场", code: "TFU", aliases: ["天府机场", "成都天府国际机场"] },
+  { city: "成都", name: "成都双流机场", place: "成都双流机场", code: "CTU", aliases: ["双流机场", "成都双流国际机场"] },
+  { city: "西安", name: "西安咸阳机场", place: "西安咸阳机场", code: "XIY", aliases: ["咸阳机场", "西安咸阳国际机场"] },
+  { city: "南京", name: "南京禄口机场", place: "南京禄口机场", code: "NKG", aliases: ["禄口机场", "南京禄口国际机场"] },
+  { city: "武汉", name: "武汉天河机场", place: "武汉天河机场", code: "WUH", aliases: ["天河机场", "武汉天河国际机场"] },
+  { city: "重庆", name: "重庆江北机场", place: "重庆江北机场", code: "CKG", aliases: ["江北机场", "重庆江北国际机场"] },
+  { city: "桂林", name: "桂林两江机场", place: "桂林两江", code: "KWL", aliases: ["两江机场", "桂林两江国际机场"] }
 ];
 
 const airportAliasMap = commonAirports.reduce((map, airport) => {
-  [airport.name, airport.name.replace(/机场$/, ""), airport.name.replace(/国际机场$/, ""), airport.city].forEach((alias) => {
-    if (alias && !map.has(alias)) map.set(alias, airport);
+  [
+    airport.name,
+    airport.name.replace(/机场$/, ""),
+    airport.name.replace(/国际机场$/, ""),
+    airport.code,
+    airport.city,
+    ...(airport.aliases || [])
+  ].flatMap((alias) => {
+    if (!alias) return [];
+    return [alias, alias.replace(/国际机场$/, ""), alias.replace(/机场$/, "")];
+  }).forEach((alias) => {
+    if (!alias) return;
+    if (!map.has(alias)) map.set(alias, airport);
+    const uppercaseAlias = alias.toUpperCase();
+    if (/^[A-Z0-9]+$/.test(uppercaseAlias) && !map.has(uppercaseAlias)) map.set(uppercaseAlias, airport);
   });
   return map;
 }, new Map());
@@ -1089,9 +1118,10 @@ function inferRoute(text, mode) {
   // 支持 "上海到杭州"、"惠州飞上海浦东"、"惠州平潭--上海浦东" 等分隔符
   const routeMatch = text.match(/(.+?)(?:到|->|--|—|–|至|飞)(.+)/);
   if (routeMatch) {
+    const normalizeRoutePlace = mode === "flight" ? normalizeFlightPlace : normalizePlace;
     return {
-      origin: normalizePlace(cleanPlace(routeMatch[1])),
-      destination: normalizePlace(cleanPlace(routeMatch[2])),
+      origin: normalizeRoutePlace(cleanPlace(routeMatch[1])),
+      destination: normalizeRoutePlace(cleanPlace(routeMatch[2])),
       userProvided: true
     };
   }
@@ -1115,9 +1145,11 @@ function cleanPlace(value) {
 function normalizePlace(value) {
   const trimmed = String(value || "").trim().replace(/T\d+$/i, "");
   if (places[trimmed]) return trimmed;
-  if (airportAliasMap.has(trimmed)) return airportAliasMap.get(trimmed).place;
+  const airportAlias = resolveAirportAlias(trimmed);
+  if (airportAlias) return airportAlias.place;
   const airportSuffixRemoved = trimmed.replace(/国际机场$/, "机场").replace(/机场$/, "");
-  if (airportAliasMap.has(airportSuffixRemoved)) return airportAliasMap.get(airportSuffixRemoved).place;
+  const suffixRemovedAirport = resolveAirportAlias(airportSuffixRemoved);
+  if (suffixRemovedAirport) return suffixRemovedAirport.place;
   if (places[airportSuffixRemoved]) return airportSuffixRemoved;
   if (trimmed.includes("惠州平潭")) return "惠州平潭";
   if (trimmed.includes("浦东")) return "上海浦东";
@@ -1142,8 +1174,14 @@ function normalizePlace(value) {
 
 function normalizeFlightPlace(value) {
   const trimmed = String(value || "").trim();
-  if (airportAliasMap.has(trimmed)) return airportAliasMap.get(trimmed).name;
+  const airportAlias = resolveAirportAlias(trimmed);
+  if (airportAlias) return airportAlias.name;
   return normalizePlace(trimmed);
+}
+
+function resolveAirportAlias(value) {
+  const trimmed = String(value || "").trim();
+  return airportAliasMap.get(trimmed) || airportAliasMap.get(trimmed.toUpperCase()) || null;
 }
 
 function estimateDistance(origin, destination) {
