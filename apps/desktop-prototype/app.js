@@ -386,6 +386,7 @@ let trips = [];
 let activeFilter = "all";
 let selectedTripId = null;
 let editingTripId = null;
+let pendingQuickTrip = null;
 let currentView = "home";
 let appStarted = false;
 let map;
@@ -479,15 +480,11 @@ form.addEventListener("submit", (event) => {
   if (!resolvedMode) return;
 
   const draft = createTripDraft(rawText, extractTripDate(rawText) || dateInput.value, resolvedMode);
-  trips = [draft, ...trips];
-  selectedTripId = draft.id;
-  persistTrips();
+  pendingQuickTrip = draft;
   input.value = "";
   modeSelect.value = "auto";
   switchView("home", { skipRender: true });
-  render();
-  handleRailStationSelection(draft.id);
-  handleFlightCompletion(draft.id);
+  renderQuickTripPreview(draft);
 });
 
 exportButtons.forEach((button) => button.addEventListener("click", () => {
@@ -1004,6 +1001,28 @@ function createTripDraft(rawText, date, explicitMode = "auto") {
   };
 }
 
+function getWorkflowTrip(tripId) {
+  return trips.find((item) => item.id === tripId) || (pendingQuickTrip?.id === tripId ? pendingQuickTrip : null);
+}
+
+function isPendingWorkflowTrip(trip) {
+  return Boolean(trip && pendingQuickTrip?.id === trip.id);
+}
+
+function commitPendingTrip(trip) {
+  if (!isPendingWorkflowTrip(trip)) return false;
+  pendingQuickTrip = null;
+  trips = [trip, ...trips];
+  selectedTripId = trip.id;
+  return true;
+}
+
+function cancelPendingTrip() {
+  pendingQuickTrip = null;
+  editingTripId = null;
+  render();
+}
+
 function resolveInputMode(rawText, selectedMode) {
   if (selectedMode !== "auto") return selectedMode;
   const analysis = analyzeTransportCode(rawText);
@@ -1412,6 +1431,11 @@ function selectTrip(tripId, options = {}) {
 }
 
 function renderHero() {
+  if (pendingQuickTrip) {
+    renderQuickTripPreview(pendingQuickTrip);
+    return;
+  }
+
   const trip = trips.find((item) => item.id === selectedTripId);
   if (!trip) {
     heroOverlay.innerHTML = `<p class="hero-route">暂无行程</p>`;
@@ -1456,6 +1480,99 @@ function renderHero() {
   heroOverlay.querySelector('[data-action="delete"]').addEventListener("click", () => {
     deleteTrip(trip.id);
   });
+}
+
+function renderQuickTripPreview(trip) {
+  pendingQuickTrip = trip;
+  heroOverlay.innerHTML = `
+    <form class="edit-form quick-preview-form" id="quickPreviewForm">
+      <div class="ticket-panel-head">
+        <div>
+          <h3>识别预览</h3>
+          <p class="ticket-sub">确认前不会新增行程，可先修改识别结果。</p>
+        </div>
+        <button class="ghost-button small" data-action="cancel" type="button">取消</button>
+      </div>
+      ${editField("previewMode", "方式", modeSelectOptions(trip.mode, "previewMode"))}
+      ${editField("previewTitle", "标题", `<input id="previewTitle" value="${escapeHtml(trip.title)}" required>`)}
+      ${editField("previewOrigin", "起点", `<input id="previewOrigin" value="${escapeHtml(trip.origin)}" required>`)}
+      ${editField("previewDestination", "终点", `<input id="previewDestination" value="${escapeHtml(trip.destination)}" required>`)}
+      ${editField("previewDate", "日期", `<input id="previewDate" type="date" value="${escapeHtml(trip.date)}" required>`)}
+      ${editField("previewDeparture", "出发", `<input id="previewDeparture" type="time" value="${escapeHtml(timeInputValue(trip.departureTime))}">`)}
+      ${editField("previewArrival", "到达", `<input id="previewArrival" type="time" value="${escapeHtml(timeInputValue(trip.arrivalTime))}">`)}
+      ${editField("previewOperator", "运营方", `<input id="previewOperator" value="${escapeHtml(trip.operator)}">`)}
+      ${editField("previewNotes", "备注", `<textarea id="previewNotes" rows="2">${escapeHtml(trip.notes || "")}</textarea>`)}
+      <div class="edit-actions">
+        <button class="primary-button" data-action="confirm" type="submit">确认保存</button>
+        ${trip.mode === "rail" && /^[GDCZTK]\d{1,5}$/i.test(trip.title) ? `<button class="ghost-button" data-action="rail-complete" type="button">补全铁路站点</button>` : ""}
+        ${trip.mode === "flight" ? `<button class="ghost-button" data-action="flight-register" type="button">填写航班信息</button>` : ""}
+      </div>
+    </form>
+  `;
+
+  const formEl = heroOverlay.querySelector("#quickPreviewForm");
+  heroOverlay.querySelector("#previewMode").addEventListener("change", () => {
+    syncQuickPreviewValues(trip);
+    renderQuickTripPreview(trip);
+  });
+
+  formEl.addEventListener("submit", (event) => {
+    event.preventDefault();
+    syncQuickPreviewValues(trip);
+    trip.distanceKm = estimateDistance(trip.origin, trip.destination) || trip.distanceKm;
+    trip.status = trip.departureTime !== "待确认" && trip.arrivalTime !== "待确认" ? "completed" : "draft";
+    commitPendingTrip(trip);
+    rememberTransportProfile(trip);
+    persistTrips();
+    render();
+  });
+
+  formEl.addEventListener("click", (event) => {
+    const action = event.target.closest("[data-action]")?.dataset.action;
+    if (!action) return;
+    if (action === "cancel") {
+      event.preventDefault();
+      cancelPendingTrip();
+      return;
+    }
+    if (action === "rail-complete") {
+      syncQuickPreviewValues(trip);
+      handleRailStationSelection(trip.id);
+      return;
+    }
+    if (action === "flight-register") {
+      syncQuickPreviewValues(trip);
+      openFlightPanel(trip.id);
+    }
+  });
+
+  formEl.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelPendingTrip();
+    }
+  });
+}
+
+function syncQuickPreviewValues(trip) {
+  const previousMode = trip.mode;
+  trip.mode = heroOverlay.querySelector("#previewMode").value;
+  trip.title = heroOverlay.querySelector("#previewTitle").value.trim() || trip.title;
+  const normalizeRoutePlace = trip.mode === "flight" ? normalizeFlightPlace : normalizePlace;
+  const origin = heroOverlay.querySelector("#previewOrigin").value.trim();
+  const destination = heroOverlay.querySelector("#previewDestination").value.trim();
+  trip.origin = origin && origin !== "待确认" ? normalizeRoutePlace(origin) : "待确认";
+  trip.destination = destination && destination !== "待确认" ? normalizeRoutePlace(destination) : "待确认";
+  trip.date = heroOverlay.querySelector("#previewDate").value || trip.date;
+  trip.departureTime = heroOverlay.querySelector("#previewDeparture").value.trim() || "待确认";
+  trip.arrivalTime = heroOverlay.querySelector("#previewArrival").value.trim() || "待确认";
+  trip.operator = heroOverlay.querySelector("#previewOperator").value.trim() || defaultOperatorForMode(trip.mode, trip.title);
+  trip.notes = heroOverlay.querySelector("#previewNotes").value.trim();
+  trip.routeUserProvided = trip.origin !== "待确认" && trip.destination !== "待确认";
+
+  if (trip.mode !== previousMode && (!trip.operator || trip.operator === defaultOperatorForMode(previousMode, trip.title))) {
+    trip.operator = defaultOperatorForMode(trip.mode, trip.title);
+  }
 }
 
 function renderEditForm(trip) {
@@ -1550,16 +1667,18 @@ function editField(id, label, controlHtml) {
   return `<label class="edit-field" for="${id}"><span>${escapeHtml(label)}</span>${controlHtml}</label>`;
 }
 
-function modeSelectOptions(currentMode) {
-  return ["flight", "rail", "ship", "road"]
+function modeSelectOptions(currentMode, id = "editMode") {
+  const options = ["flight", "rail", "ship", "road"]
     .map((mode) => `<option value="${mode}"${mode === currentMode ? " selected" : ""}>${modeLabel(mode)}</option>`)
     .join("");
+  return `<select id="${id}">${options}</select>`;
 }
 
-function statusSelectOptions(currentStatus) {
-  return ["draft", "planned", "completed", "cancelled"]
+function statusSelectOptions(currentStatus, id = "editStatus") {
+  const options = ["draft", "planned", "completed", "cancelled"]
     .map((status) => `<option value="${status}"${status === currentStatus ? " selected" : ""}>${statusLabel(status)}</option>`)
     .join("");
+  return `<select id="${id}">${options}</select>`;
 }
 
 function saveTripEdit(tripId) {
@@ -1677,7 +1796,7 @@ function rememberTransportProfile(trip) {
 
 /** 登记铁路车次后：优先自动查询经停站（有记忆区间/输入区间），否则车站联想引导。 */
 async function handleRailStationSelection(tripId) {
-  const trip = trips.find((item) => item.id === tripId);
+  const trip = getWorkflowTrip(tripId);
   if (!trip || trip.mode !== "rail") return;
   if (!/^[GDCZTK]\d{1,5}$/i.test(trip.title)) return;
 
@@ -1704,7 +1823,7 @@ function addDays(dateStr, days) {
 
 /** 在 Hero 卡片内查询车次全部经停站，并让用户选择上车站与到达站。 */
 async function openStationSelector(tripId, options = {}) {
-  const trip = trips.find((item) => item.id === tripId);
+  const trip = getWorkflowTrip(tripId);
   if (!trip) return;
 
   // 首次打开时渲染面板框架（含查询日期选择器）；重试时仅刷新列表区
@@ -1729,6 +1848,10 @@ async function openStationSelector(tripId, options = {}) {
     `;
 
     heroOverlay.querySelector('[data-action="skip"]').addEventListener("click", () => {
+      if (isPendingWorkflowTrip(trip)) {
+        cancelPendingTrip();
+        return;
+      }
       editingTripId = null;
       render();
     });
@@ -1804,7 +1927,7 @@ async function openStationSelector(tripId, options = {}) {
     trip.origin = result.stations[0].station_name;
     trip.destination = result.stations[result.stations.length - 1].station_name;
     trip.routeUserProvided = true;
-    persistTrips();
+    if (!isPendingWorkflowTrip(trip)) persistTrips();
   }
   rememberRoute(trip.title, trip.origin, trip.destination);
   renderStationSelector(trip, result.stations);
@@ -1847,7 +1970,7 @@ function renderRouteInput(trip, errorMsg = "") {
     const manualDate = listEl.querySelector("#manualDate")?.value;
     if (manualDate && manualDate !== trip.date) {
       trip.date = manualDate;
-      persistTrips();
+      if (!isPendingWorkflowTrip(trip)) persistTrips();
     }
   };
 
@@ -1862,7 +1985,7 @@ function renderRouteInput(trip, errorMsg = "") {
     trip.origin = normalizePlace(from);
     trip.destination = normalizePlace(to);
     trip.routeUserProvided = true;
-    persistTrips();
+    if (!isPendingWorkflowTrip(trip)) persistTrips();
     await openStationSelector(trip.id, { autoTomorrow: false });
   });
 
@@ -1885,6 +2008,7 @@ function renderRouteInput(trip, errorMsg = "") {
     rememberRoute(trip.title, trip.origin, trip.destination);
     rememberTransportProfile(trip);
     editingTripId = null;
+    commitPendingTrip(trip);
     persistTrips();
     render();
   });
@@ -2038,6 +2162,7 @@ function saveStationSelection(trip, stations) {
   rememberRoute(trip.title, trip.origin, trip.destination);
   rememberTransportProfile(trip);
   editingTripId = null;
+  commitPendingTrip(trip);
   persistTrips();
   render();
 }
@@ -2046,7 +2171,7 @@ function saveStationSelection(trip, stations) {
 
 /** 登记航班号后：打开纯用户登记面板。 */
 function handleFlightCompletion(tripId) {
-  const trip = trips.find((item) => item.id === tripId);
+  const trip = getWorkflowTrip(tripId);
   if (!trip || trip.mode !== "flight") return;
   if (!/^[A-Z0-9]{2}\d{3,4}$/i.test(trip.title)) return;
   openFlightPanel(tripId);
@@ -2054,7 +2179,7 @@ function handleFlightCompletion(tripId) {
 
 /** 在 Hero 卡片内登记航班：航司、航班号、起飞日期、起降地由用户确认。 */
 function openFlightPanel(tripId) {
-  const trip = trips.find((item) => item.id === tripId);
+  const trip = getWorkflowTrip(tripId);
   if (!trip) return;
   const airline = trip.operator && trip.operator !== "待补全航司" ? trip.operator : getFlightAirlineFallback(trip.title);
 
@@ -2078,6 +2203,10 @@ function openFlightPanel(tripId) {
 
   // 跳过：保留草稿（航司若已回填则保留），回到行程展示
   heroOverlay.querySelector('[data-action="skip"]').addEventListener("click", () => {
+    if (isPendingWorkflowTrip(trip)) {
+      cancelPendingTrip();
+      return;
+    }
     editingTripId = null;
     render();
   });
@@ -2162,6 +2291,7 @@ function renderFlightManualForm(trip, targetListEl = null) {
     trip.notes = `手动登记航班：${trip.origin} → ${trip.destination}（${trip.date}）。`;
     rememberTransportProfile(trip);
     editingTripId = null;
+    commitPendingTrip(trip);
     persistTrips();
     render();
   });
