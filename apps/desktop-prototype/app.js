@@ -185,36 +185,67 @@ const places = {
   "黄山": { lat: 29.7147, lng: 118.3376 }
 };
 
-const commonAirports = (window.LEAVES_AIRPORTS || []).map((airport) => ({
-  ...airport,
-  place: airport.place || airport.name
-}));
+const coreAirportFallbacks = [
+  { city: "北京", name: "北京首都机场", place: "北京首都机场", code: "PEK", aliases: ["首都机场", "北京首都国际机场"], lat: 40.0801, lng: 116.5846 },
+  { city: "北京", name: "北京大兴机场", place: "北京大兴机场", code: "PKX", aliases: ["大兴机场", "北京大兴国际机场"], lat: 39.5098, lng: 116.4105 },
+  { city: "上海", name: "上海虹桥机场", place: "上海虹桥机场", code: "SHA", aliases: ["虹桥机场", "上海虹桥国际机场"], lat: 31.1968, lng: 121.3260 },
+  { city: "上海", name: "上海浦东机场", place: "上海浦东机场", code: "PVG", aliases: ["浦东机场", "上海浦东国际机场"], lat: 31.1443, lng: 121.8083 },
+  { city: "广州", name: "广州白云机场", place: "广州白云机场", code: "CAN", aliases: ["白云机场", "广州白云国际机场"], lat: 23.3924, lng: 113.2988 },
+  { city: "深圳", name: "深圳宝安机场", place: "深圳宝安机场", code: "SZX", aliases: ["宝安机场", "深圳宝安国际机场"], lat: 22.6393, lng: 113.8107 },
+  { city: "杭州", name: "杭州萧山机场", place: "杭州萧山机场", code: "HGH", aliases: ["萧山机场", "杭州萧山国际机场"], lat: 30.2295, lng: 120.4345 },
+  { city: "厦门", name: "厦门高崎机场", place: "厦门高崎机场", code: "XMN", aliases: ["厦门机场", "高崎机场", "厦门高崎国际机场"], lat: 24.5440, lng: 118.1277 },
+  { city: "泉州", name: "泉州晋江机场", place: "泉州晋江机场", code: "JJN", aliases: ["泉州机场", "晋江机场", "泉州晋江国际机场"], lat: 24.7964, lng: 118.5890 }
+];
 
-commonAirports.forEach((airport) => {
-  if (!airport || !Number.isFinite(airport.lat) || !Number.isFinite(airport.lng)) return;
-  const coordinate = { lat: airport.lat, lng: airport.lng };
-  [
-    airport.place,
+const airportData = Array.isArray(window.LEAVES_AIRPORTS) && window.LEAVES_AIRPORTS.length
+  ? window.LEAVES_AIRPORTS
+  : coreAirportFallbacks;
+
+const commonAirports = airportData.map(normalizeAirportRecord);
+
+function inferChineseAirportCity(name = "", city = "") {
+  if (/[\u4e00-\u9fa5]/.test(city)) return city;
+  const airportName = String(name || "").replace(/国际机场$/, "").replace(/机场$/, "");
+  if (!/[\u4e00-\u9fa5]/.test(airportName)) return "";
+  return airportName
+    .replace(/(首都|大兴|虹桥|浦东|白云|宝安|萧山|高崎|晋江|天府|双流|咸阳|禄口|天河|江北|两江)$/, "")
+    .trim();
+}
+
+function normalizeAirportRecord(airport) {
+  const chineseCity = inferChineseAirportCity(airport.name, airport.city);
+  const displayCity = chineseCity || airport.city || "";
+  const aliases = new Set([
     airport.name,
+    airport.place,
     airport.name?.replace(/国际机场$/, "机场"),
     airport.name?.replace(/机场$/, ""),
     airport.code,
     airport.icao,
+    airport.city,
+    chineseCity,
+    chineseCity && `${chineseCity}机场`,
     ...(airport.aliases || [])
-  ].forEach((alias) => {
+  ].filter(Boolean));
+
+  return {
+    ...airport,
+    city: displayCity,
+    place: airport.place || airport.name,
+    searchAliases: [...aliases]
+  };
+}
+
+commonAirports.forEach((airport) => {
+  if (!airport || !Number.isFinite(airport.lat) || !Number.isFinite(airport.lng)) return;
+  const coordinate = { lat: airport.lat, lng: airport.lng };
+  airport.searchAliases.forEach((alias) => {
     if (alias && !places[alias]) places[alias] = coordinate;
   });
 });
 
 const airportAliasMap = commonAirports.reduce((map, airport) => {
-  [
-    airport.name,
-    airport.name.replace(/机场$/, ""),
-    airport.name.replace(/国际机场$/, ""),
-    airport.code,
-    airport.city,
-    ...(airport.aliases || [])
-  ].flatMap((alias) => {
+  airport.searchAliases.flatMap((alias) => {
     if (!alias) return [];
     return [alias, alias.replace(/国际机场$/, ""), alias.replace(/机场$/, "")];
   }).forEach((alias) => {
@@ -2320,9 +2351,27 @@ function flightAirportInput(id, value = "", placeholder = "") {
 
 function flightAirportDatalist() {
   const options = commonAirports
-    .map((airport) => `<option value="${escapeHtml(airport.name)}" label="${escapeHtml(airport.city)}"></option>`)
+    .slice()
+    .sort(compareAirportsForPicker)
+    .map((airport) => {
+      const labelParts = [
+        airport.city,
+        airport.code,
+        airport.usage === "军民合用" ? "军民合用" : ""
+      ].filter(Boolean);
+      return `<option value="${escapeHtml(airport.name)}" label="${escapeHtml(labelParts.join(" · "))}"></option>`;
+    })
     .join("");
   return `<datalist id="flightAirportList">${options}</datalist>`;
+}
+
+function compareAirportsForPicker(a, b) {
+  if (a.country !== b.country) return a.country === "CN" ? -1 : 1;
+  if (a.scheduled !== b.scheduled) return a.scheduled ? -1 : 1;
+  const aChinese = /[\u4e00-\u9fa5]/.test(a.name) || /[\u4e00-\u9fa5]/.test(a.city);
+  const bChinese = /[\u4e00-\u9fa5]/.test(b.name) || /[\u4e00-\u9fa5]/.test(b.city);
+  if (aChinese !== bChinese) return aChinese ? -1 : 1;
+  return `${a.city}${a.name}`.localeCompare(`${b.city}${b.name}`, "zh-Hans-CN");
 }
 
 function getFlightAirlineFallback(flightNo) {
