@@ -2219,7 +2219,7 @@ function openFlightPanel(tripId) {
   const airline = trip.operator && trip.operator !== "待补全航司" ? trip.operator : getFlightAirlineFallback(trip.title);
 
   heroOverlay.innerHTML = `
-    <div class="ticket-panel station-panel">
+    <div class="ticket-panel station-panel flight-panel">
       <div class="ticket-panel-head">
         <div>
           <p class="ticket-title">${escapeHtml(trip.title)} 航班登记</p>
