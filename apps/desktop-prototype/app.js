@@ -2266,7 +2266,10 @@ function handleFlightCompletion(tripId) {
 function openFlightPanel(tripId) {
   const trip = getWorkflowTrip(tripId);
   if (!trip) return;
-  const airline = trip.operator && trip.operator !== "待补全航司" ? trip.operator : getFlightAirlineFallback(trip.title);
+  const fallbackAirline = getFlightAirlineFallback(trip.title);
+  const airline = shouldAutofillFlightAirline(trip.operator, fallbackAirline)
+    ? fallbackAirline
+    : trip.operator || "";
 
   heroOverlay.innerHTML = `
     <div class="ticket-panel station-panel flight-panel">
@@ -2299,7 +2302,7 @@ function openFlightPanel(tripId) {
   heroOverlay.querySelector("#flightQueryNo").addEventListener("input", () => {
     const fallback = getFlightAirlineFallback(heroOverlay.querySelector("#flightQueryNo").value);
     const operatorInput = heroOverlay.querySelector("#flightOperator");
-    if (fallback && (!operatorInput.value || operatorInput.value === "待补全航司")) {
+    if (shouldAutofillFlightAirline(operatorInput.value, fallback)) {
       operatorInput.value = fallback;
     }
   });
@@ -2426,6 +2429,12 @@ function compareAirportsForPicker(a, b) {
 
 function getFlightAirlineFallback(flightNo) {
   return commonFlightAirlines[String(flightNo || "").slice(0, 2).toUpperCase()] || "";
+}
+
+function shouldAutofillFlightAirline(currentAirline, fallbackAirline) {
+  if (!fallbackAirline) return false;
+  const current = String(currentAirline || "").trim();
+  return !current || current === "待补全航司" || Object.values(commonFlightAirlines).includes(current);
 }
 
 function normalizeFlightNumber(value) {
