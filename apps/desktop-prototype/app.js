@@ -336,6 +336,36 @@ function resolvePlace(name) {
   return null;
 }
 
+function normalizeRailRouteStations(stations, fromIndex = 0, toIndex = (stations?.length || 0) - 1) {
+  if (!Array.isArray(stations) || stations.length < 2) return [];
+  const rawStart = Number(fromIndex);
+  const rawEnd = Number(toIndex);
+  const start = Math.max(0, Math.min(Number.isFinite(rawStart) ? rawStart : 0, stations.length - 1));
+  const end = Math.max(start, Math.min(Number.isFinite(rawEnd) ? rawEnd : stations.length - 1, stations.length - 1));
+
+  return stations
+    .slice(start, end + 1)
+    .map((station, index) => ({
+      station_no: station.station_no || station.stationNo || "",
+      station_name: station.station_name || station.stationName || station.name || "",
+      arrive_time: station.arrive_time || station.arriveTime || "----",
+      start_time: station.start_time || station.startTime || "----",
+      stopover_time: station.stopover_time || station.stopoverTime || "",
+      sequence: index + 1
+    }))
+    .filter((station) => station.station_name);
+}
+
+function cloneRouteStations(stations) {
+  return normalizeRailRouteStations(stations);
+}
+
+function routeStationsMatchTrip(trip) {
+  const stations = cloneRouteStations(trip?.routeStations);
+  if (stations.length < 2) return false;
+  return stations[0].station_name === trip.origin && stations[stations.length - 1].station_name === trip.destination;
+}
+
 const knownRoutes = {
   "rail:上海:杭州": ["上海虹桥", "嘉兴", "杭州东"],
   "rail:杭州:上海": ["杭州东", "嘉兴", "上海虹桥"],
@@ -1091,6 +1121,7 @@ function createTripDraft(rawText, date, explicitMode = "auto") {
     departureTime: times.departureTime || (reusedTimes && reusable.departureTime) || "待确认",
     arrivalTime: times.arrivalTime || (reusedTimes && reusable.arrivalTime) || "待确认",
     distanceKm: reusedRoute ? reusable.distanceKm || estimateDistance(reusable.origin, reusable.destination) : estimateDistance(route.origin, route.destination),
+    routeStations: reusedRoute ? cloneRouteStations(reusable.routeStations) : undefined,
     status: "draft",
     notes: reusable ? `由输入 "${rawText}" 生成，已复用此前登记的${modeLabel(mode)}信息，等待用户确认。` : `由输入 "${rawText}" 生成，等待用户确认和数据源补全。`
   };
@@ -1419,6 +1450,23 @@ function renderMap(visibleTrips) {
       return marker;
     });
 
+    const railStationPoints = getRailRouteStationPoints(trip);
+    if (trip.mode === "rail" && isActive && railStationPoints.length > 2) {
+      railStationPoints.slice(1, -1).forEach(({ station, point }) => {
+        const marker = L.circleMarker(point, {
+          radius: 4,
+          color: "#ffffff",
+          weight: 2,
+          fillColor: modeColors.rail,
+          fillOpacity: 0.9,
+          className: "trip-marker rail-stop-marker"
+        }).addTo(markerLayer);
+        marker.bindTooltip(station.station_name, { direction: "top", offset: [0, -6] });
+        marker.on("click", () => selectTrip(trip.id, { focusMap: true }));
+        endpointMarkers.push(marker);
+      });
+    }
+
     if (trip.mode === "flight" && isActive) {
       const middlePoint = points[Math.floor(points.length / 2)];
       endpointMarkers.push(
@@ -1446,6 +1494,11 @@ function renderMap(visibleTrips) {
 }
 
 function getRoutePoints(trip) {
+  const railStationPoints = getRailRouteStationPoints(trip);
+  if (railStationPoints.length >= 2) {
+    return railStationPoints.map(({ point }) => point);
+  }
+
   const routeKey = `${trip.mode}:${trip.origin}:${trip.destination}`;
   const routeNames = knownRoutes[routeKey];
 
@@ -1461,6 +1514,13 @@ function getRoutePoints(trip) {
   if (trip.mode === "flight" || trip.mode === "ship") return createFlightArc(from, to);
   if (trip.mode === "rail") return createBentGroundRoute(from, to, 0.18);
   return createBentGroundRoute(from, to, -0.12);
+}
+
+function getRailRouteStationPoints(trip) {
+  if (trip?.mode !== "rail") return [];
+  return cloneRouteStations(trip.routeStations)
+    .map((station) => ({ station, point: resolvePlace(station.station_name) }))
+    .filter(({ point }) => Boolean(point));
 }
 
 function createFlightArc(from, to) {
@@ -1727,8 +1787,9 @@ async function upgradeEditStationsToSelect(trip) {
     });
     const result = await response.json();
     if (!result.success || !result.stations || result.stations.length < 2) return;
+    const routeStations = normalizeRailRouteStations(result.stations);
 
-    const options = result.stations
+    const options = routeStations
       .map((s, index) => {
         const text = `${index + 1}. ${s.station_name}  ${s.arrive_time !== "----" ? `到 ${s.arrive_time}` : ""} ${s.start_time !== "----" ? `发 ${s.start_time}` : ""}`.trim();
         return `<option value="${escapeHtml(s.station_name)}">${escapeHtml(text)}</option>`;
@@ -1738,20 +1799,22 @@ async function upgradeEditStationsToSelect(trip) {
     const fromSelect = document.createElement("select");
     fromSelect.id = "editOrigin";
     fromSelect.innerHTML = options;
-    const fromIndex = result.stations.findIndex((s) => s.station_name === trip.origin);
-    fromSelect.value = fromIndex >= 0 ? result.stations[fromIndex].station_name : result.stations[0].station_name;
+    fromSelect.dataset.routeStations = JSON.stringify(routeStations);
+    const fromIndex = routeStations.findIndex((s) => s.station_name === trip.origin);
+    fromSelect.value = fromIndex >= 0 ? routeStations[fromIndex].station_name : routeStations[0].station_name;
     originInput.replaceWith(fromSelect);
 
     const destSelect = document.createElement("select");
     destSelect.id = "editDestination";
     destSelect.innerHTML = options;
-    const toIndex = result.stations.findIndex((s) => s.station_name === trip.destination);
-    destSelect.value = toIndex >= 0 ? result.stations[toIndex].station_name : result.stations[result.stations.length - 1].station_name;
+    destSelect.dataset.routeStations = JSON.stringify(routeStations);
+    const toIndex = routeStations.findIndex((s) => s.station_name === trip.destination);
+    destSelect.value = toIndex >= 0 ? routeStations[toIndex].station_name : routeStations[routeStations.length - 1].station_name;
     destInput.replaceWith(destSelect);
 
     const successHint = document.createElement("p");
     successHint.className = "ticket-success";
-    successHint.textContent = `已查询到 ${trip.title} 车次信息（${result.stations.length} 站），起点/终点已切换为经停站下拉选择。`;
+    successHint.textContent = `已查询到 ${trip.title} 车次信息（${routeStations.length} 站），起点/终点已切换为经停站下拉选择。`;
     heroOverlay.querySelector("#editForm h3").after(successHint);
   } catch (e) {
     /* 查询失败保持文本输入 */
@@ -1783,6 +1846,17 @@ function saveTripEdit(tripId) {
   // 起点/终点控件可能是文本输入（普通行程）或经停站下拉（铁路已查询到车次），取值方式一致
   const originEl = heroOverlay.querySelector("#editOrigin");
   const destEl = heroOverlay.querySelector("#editDestination");
+  let selectedRouteStations = [];
+  if (originEl.tagName === "SELECT" && destEl.tagName === "SELECT" && originEl.dataset.routeStations) {
+    try {
+      const stations = JSON.parse(originEl.dataset.routeStations);
+      const fromIndex = stations.findIndex((station) => station.station_name === originEl.value);
+      const toIndex = stations.findIndex((station) => station.station_name === destEl.value);
+      selectedRouteStations = normalizeRailRouteStations(stations, fromIndex, toIndex);
+    } catch (e) {
+      selectedRouteStations = [];
+    }
+  }
 
   trip.mode = heroOverlay.querySelector("#editMode").value;
   trip.title = heroOverlay.querySelector("#editTitle").value.trim() || trip.title;
@@ -1795,6 +1869,11 @@ function saveTripEdit(tripId) {
   trip.distanceKm = Number(heroOverlay.querySelector("#editDistance").value) || estimateDistance(trip.origin, trip.destination);
   trip.status = heroOverlay.querySelector("#editStatus").value;
   trip.notes = heroOverlay.querySelector("#editNotes").value.trim();
+  if (trip.mode === "rail" && selectedRouteStations.length >= 2) {
+    trip.routeStations = selectedRouteStations;
+  } else if (trip.mode !== "rail" || !routeStationsMatchTrip(trip)) {
+    delete trip.routeStations;
+  }
 
   rememberTransportProfile(trip);
   editingTripId = null;
@@ -1874,7 +1953,8 @@ function compactTripProfile(trip) {
     destination: trip.destination,
     departureTime: trip.departureTime && trip.departureTime !== "待确认" ? trip.departureTime : "",
     arrivalTime: trip.arrivalTime && trip.arrivalTime !== "待确认" ? trip.arrivalTime : "",
-    distanceKm: Number(trip.distanceKm) || estimateDistance(trip.origin, trip.destination) || 0
+    distanceKm: Number(trip.distanceKm) || estimateDistance(trip.origin, trip.destination) || 0,
+    routeStations: cloneRouteStations(trip.routeStations)
   };
 }
 
@@ -2253,6 +2333,7 @@ function saveStationSelection(trip, stations) {
   trip.status = "completed";
   // 距离兜底：按起讫站坐标计算直线距离（无接口数据时使用）
   trip.distanceKm = estimateDistance(trip.origin, trip.destination) || trip.distanceKm;
+  trip.routeStations = normalizeRailRouteStations(stations, fromIndex, toIndex);
   trip.notes = `已通过 12306 确认区间：${from.station_name} → ${to.station_name}。`;
   rememberRoute(trip.title, trip.origin, trip.destination);
   rememberTransportProfile(trip);
