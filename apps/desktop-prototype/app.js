@@ -252,6 +252,16 @@ const airportData = Array.isArray(window.LEAVES_AIRPORTS) && window.LEAVES_AIRPO
   : coreAirportFallbacks;
 
 const commonAirports = airportData.map(normalizeAirportRecord);
+const airportPickerInitialLimit = 40;
+const airportPickerSearchLimit = 60;
+const popularAirportCodes = new Set([
+  "PEK", "PKX", "SHA", "PVG", "CAN", "SZX", "HGH", "XMN", "CTU", "TFU",
+  "XIY", "NKG", "WUH", "CKG", "KMG", "TAO", "SIN", "KUL", "BKI", "BKK",
+  "DMK", "HKT", "SGN", "HAN", "DAD", "CGK", "DPS", "MNL", "CEB", "PNH",
+  "LHR", "LGW", "CDG", "ORY", "FRA", "MUC", "AMS", "MAD", "BCN", "FCO",
+  "MXP", "ZRH", "VIE", "CPH", "IST", "DXB", "DOH", "AUH", "JFK", "LAX",
+  "SFO", "ORD", "YYZ", "YVR", "SYD", "MEL", "AKL"
+]);
 
 function inferChineseAirportCity(name = "", city = "") {
   if (/[\u4e00-\u9fa5]/.test(city)) return city;
@@ -2344,6 +2354,7 @@ function renderFlightManualForm(trip, targetListEl = null) {
   `;
 
   const hintEl = listEl.querySelector(".ticket-sub");
+  wireFlightAirportPicker(listEl);
 
   listEl.querySelector('[data-action="save"]').addEventListener("click", () => {
     const registration = readFlightRegistrationValues();
@@ -2402,10 +2413,29 @@ function flightAirportInput(id, value = "", placeholder = "") {
   return `<input id="${id}" list="flightAirportList" value="${escapeHtml(value || "")}" placeholder="${escapeHtml(placeholder)}" autocomplete="off" required>`;
 }
 
-function flightAirportDatalist() {
-  const options = commonAirports
-    .slice()
-    .sort(compareAirportsForPicker)
+function flightAirportDatalist(query = "") {
+  return `<datalist id="flightAirportList">${renderFlightAirportOptions(query)}</datalist>`;
+}
+
+function wireFlightAirportPicker(scopeEl) {
+  const datalist = scopeEl.querySelector("#flightAirportList");
+  if (!datalist) return;
+  let frameId = 0;
+  const refresh = (query) => {
+    if (frameId) cancelAnimationFrame(frameId);
+    frameId = requestAnimationFrame(() => {
+      datalist.innerHTML = renderFlightAirportOptions(query);
+      frameId = 0;
+    });
+  };
+  scopeEl.querySelectorAll("#flightFrom, #flightTo").forEach((input) => {
+    input.addEventListener("focus", () => refresh(input.value));
+    input.addEventListener("input", () => refresh(input.value));
+  });
+}
+
+function renderFlightAirportOptions(query = "") {
+  return findFlightAirportOptions(query)
     .map((airport) => {
       const labelParts = [
         airport.city,
@@ -2415,10 +2445,65 @@ function flightAirportDatalist() {
       return `<option value="${escapeHtml(airport.name)}" label="${escapeHtml(labelParts.join(" · "))}"></option>`;
     })
     .join("");
-  return `<datalist id="flightAirportList">${options}</datalist>`;
+}
+
+function findFlightAirportOptions(query = "") {
+  const normalizedQuery = normalizeAirportPickerQuery(query);
+  const sortedAirports = getSortedAirportsForPicker();
+  if (!normalizedQuery) {
+    const popular = sortedAirports.filter((airport) => popularAirportCodes.has(airport.code));
+    const seenCodes = new Set();
+    return [...popular, ...sortedAirports]
+      .filter((airport) => {
+        if (seenCodes.has(airport.code)) return false;
+        seenCodes.add(airport.code);
+        return true;
+      })
+      .slice(0, airportPickerInitialLimit);
+  }
+
+  return sortedAirports
+    .map((airport) => ({ airport, score: scoreAirportForQuery(airport, normalizedQuery) }))
+    .filter((match) => Number.isFinite(match.score))
+    .sort((a, b) => a.score - b.score || compareAirportsForPicker(a.airport, b.airport))
+    .slice(0, airportPickerSearchLimit)
+    .map((match) => match.airport);
+}
+
+function normalizeAirportPickerQuery(value = "") {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function scoreAirportForQuery(airport, query) {
+  const queryUpper = query.toUpperCase();
+  const name = String(airport.name || "").toLowerCase();
+  const city = String(airport.city || "").toLowerCase();
+  const code = String(airport.code || "").toUpperCase();
+  const aliases = airport.searchAliases || [];
+  if (code === queryUpper) return 0;
+  if (code.startsWith(queryUpper)) return 1;
+  if (name === query) return 2;
+  if (city === query) return 3;
+  if (name.startsWith(query)) return 4;
+  if (city.startsWith(query)) return 5;
+  if (aliases.some((alias) => String(alias).toLowerCase().startsWith(query))) return 6;
+  if (name.includes(query)) return 8;
+  if (city.includes(query)) return 9;
+  if (aliases.some((alias) => String(alias).toLowerCase().includes(query))) return 10;
+  return Infinity;
+}
+
+function getSortedAirportsForPicker() {
+  if (!getSortedAirportsForPicker.cache) {
+    getSortedAirportsForPicker.cache = commonAirports.slice().sort(compareAirportsForPicker);
+  }
+  return getSortedAirportsForPicker.cache;
 }
 
 function compareAirportsForPicker(a, b) {
+  const aPopular = popularAirportCodes.has(a.code);
+  const bPopular = popularAirportCodes.has(b.code);
+  if (aPopular !== bPopular) return aPopular ? -1 : 1;
   if (a.country !== b.country) return a.country === "CN" ? -1 : 1;
   if (a.scheduled !== b.scheduled) return a.scheduled ? -1 : 1;
   const aChinese = /[\u4e00-\u9fa5]/.test(a.name) || /[\u4e00-\u9fa5]/.test(a.city);
