@@ -71,8 +71,9 @@
             <span id="currentUserName" class="user-name" title="当前账号"></span>
             <button id="logoutButton" class="ghost-button small" type="button">退出</button>
           </div>
+          <button class="ghost-button small import-csv" type="button">导入CSV</button>
+          <button class="ghost-button small import-json" type="button">导入JSON</button>
           <button class="ghost-button small export-json" type="button">导出</button>
-          <button class="ghost-button small import-json" type="button">导入</button>
         </div>
       </header>
 
@@ -164,7 +165,8 @@
         </section>
       </main>
     </div>
-    <input id="importFile" type="file" accept="application/json,.json" hidden>
+    <input id="importJsonFile" type="file" accept="application/json,.json" hidden>
+    <input id="importCsvFile" type="file" accept="text/csv,.csv" hidden>
     <script src="./airport-data.js?v=20260909-airport-picker"></script>
     <script src="./app.js?v=20260909-airport-picker" defer></script>
   </body>

@@ -11,7 +11,7 @@ Leaves 是一个 Windows 优先的个人出行记录软件。它的目标不是�
 - ✅ 地图回顾：Leaflet 真实地图上显示航线弧线、铁路/公路线、城市点位，支持单程聚焦与重置视角。
 - ✅ 账号入口：进入 Leaves 前先登录或注册，行程按账号隔离保存。
 - ✅ 本地优先：账号维度 localStorage 缓存 + 本地服务文件持久化（正式版替换为 SQLite）。
-- ✅ 行程管理：新增、内联编辑、删除行程，JSON 一键导入导出。
+- ✅ 行程管理：新增、内联编辑、删除行程，JSON 一键导入导出，并支持 12306 积分明细 CSV 快速导入铁路行程。
 - ✅ 12306 铁路查询：登记车次后通过经停站选择补全真实发到时刻（逻辑移植自 mcp-server-12306）。
 - ⏳ 数据源可替换：通过 provider adapter 接入铁路、地图等能力；航班信息保持用户手动登记。
 
@@ -25,6 +25,7 @@ Leaves 是一个 Windows 优先的个人出行记录软件。它的目标不是�
 - [服务器部署手册](docs/DEPLOYMENT.md)
 - [账号与轻量数据库方案](docs/AUTH_SQLITE_PLAN.md)
 - [桌面交互原型](apps/desktop-prototype/index.html)
+- [12306 车票积分提取 Skill](.codex/skills/12306-ticket-points-extractor/SKILL.md)
 
 ## 一键安装与启动
 
@@ -99,6 +100,7 @@ apps/desktop-prototype/index.html
 - **编辑表单联动**：草稿态编辑铁路车次时，若查询到经停站，起点/终点自动切换为经停站下拉选择（带成功提示）；查询不到则保持文本输入。
 - **自动补全**：查询到经停站后按用户选择的上下车站写入真实发到时刻；无法查询时保留手动补录。
 - **航班登记**：登记航班后可在 Hero 卡片点击“航班登记”，由用户填写航司、航班号、起飞日期、起飞地、降落地和可选起降时间；不依赖 OCR、照片上传、远端航班 provider 或 OpenSky。
+- **CSV 快速导入铁路行程**：首页顶栏“导入CSV”支持导入 12306 积分明细提取出的 CSV，按订单号去重并追加为铁路行程；不会覆盖当前账号已有数据。推荐字段见项目内 `.codex/skills/12306-ticket-points-extractor/SKILL.md`。
 - **查询日期限制**：12306 查询日期仅支持今天到 14 天后；登记日期保存真实出行日，可填写历史日期。
 - **账号与本地持久化**：进入应用前先通过 `/api/auth/register` 或 `/api/auth/login` 建立 session；行程数据双写保存到当前账号自己的浏览器 localStorage key 和本地文件 `apps/desktop-prototype/data/users/<user-id>.trips.json`（通过 `/api/data/trips` 读写，重启/换浏览器不丢）。
 

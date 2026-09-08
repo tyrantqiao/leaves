@@ -126,6 +126,7 @@ const places = {
   "上海虹桥": { lat: 31.1968, lng: 121.3260 },
   "上海虹桥机场": { lat: 31.1968, lng: 121.3260 },
   "上海南": { lat: 31.1548, lng: 121.4299 },
+  "上海松江": { lat: 31.0360, lng: 121.2276 },
   "上海浦东": { lat: 31.1443, lng: 121.8083 },
   "上海浦东机场": { lat: 31.1443, lng: 121.8083 },
   "惠州": { lat: 23.1118, lng: 114.4168 },
@@ -174,6 +175,7 @@ const places = {
   "无锡东": { lat: 31.5883, lng: 120.4360 },
   "苏州": { lat: 31.2989, lng: 120.5853 },
   "苏州北": { lat: 31.4030, lng: 120.6400 },
+  "苏州园区": { lat: 31.3420, lng: 120.7060 },
   "常州": { lat: 31.8107, lng: 119.9741 },
   "常州北": { lat: 31.8620, lng: 119.9800 },
   "徐州": { lat: 34.2044, lng: 117.2857 },
@@ -181,6 +183,8 @@ const places = {
   "宁波": { lat: 29.8683, lng: 121.5440 },
   "温州": { lat: 27.9938, lng: 120.6994 },
   "温州南": { lat: 27.9900, lng: 120.6600 },
+  "瑞安": { lat: 27.7780, lng: 120.6250 },
+  "苍南": { lat: 27.5180, lng: 120.4260 },
   "福州": { lat: 26.0745, lng: 119.2965 },
   "福州南": { lat: 25.9900, lng: 119.3800 },
   "厦门": { lat: 24.4798, lng: 118.0894 },
@@ -193,8 +197,11 @@ const places = {
   "济南西": { lat: 36.6700, lng: 116.8900 },
   "青岛": { lat: 36.0671, lng: 120.3826 },
   "青岛北": { lat: 36.2300, lng: 120.3600 },
+  "青岛西": { lat: 35.9660, lng: 120.1700 },
   "桂林": { lat: 25.2736, lng: 110.2900 },
   "桂林两江": { lat: 25.2181, lng: 110.0392 },
+  "桂林西": { lat: 25.3250, lng: 110.2630 },
+  "阳朔": { lat: 24.7780, lng: 110.4960 },
   "天津": { lat: 39.3434, lng: 117.3616 },
   "天津西": { lat: 39.1600, lng: 117.1600 },
   "石家庄": { lat: 38.0428, lng: 114.5149 },
@@ -219,6 +226,7 @@ const places = {
   "南宁东": { lat: 22.8200, lng: 108.3700 },
   "海口": { lat: 20.0444, lng: 110.1999 },
   "三亚": { lat: 18.2528, lng: 109.5119 },
+  "神州": { lat: 18.6750, lng: 110.3320 },
   "扬州": { lat: 32.3942, lng: 119.4129 },
   "镇江": { lat: 32.1878, lng: 119.4258 },
   "南通": { lat: 31.9802, lng: 120.8943 },
@@ -556,7 +564,9 @@ const achievementProgress = document.querySelector("#achievementProgress");
 const achievementGrid = document.querySelector("#achievementGrid");
 const exportButtons = document.querySelectorAll(".export-json");
 const importButtons = document.querySelectorAll(".import-json");
-const importFile = document.querySelector("#importFile");
+const importCsvButtons = document.querySelectorAll(".import-csv");
+const importJsonFile = document.querySelector("#importJsonFile");
+const importCsvFile = document.querySelector("#importCsvFile");
 const authGate = document.querySelector("#authGate");
 const appShell = document.querySelector("#appShell");
 const authForm = document.querySelector("#authForm");
@@ -617,12 +627,21 @@ exportButtons.forEach((button) => button.addEventListener("click", () => {
 }));
 
 importButtons.forEach((button) => button.addEventListener("click", () => {
-  importFile.click();
+  importJsonFile.click();
 }));
 
-importFile.addEventListener("change", () => {
-  importTrips(importFile.files[0]);
-  importFile.value = "";
+importCsvButtons.forEach((button) => button.addEventListener("click", () => {
+  importCsvFile.click();
+}));
+
+importJsonFile.addEventListener("change", () => {
+  importTrips(importJsonFile.files[0]);
+  importJsonFile.value = "";
+});
+
+importCsvFile.addEventListener("change", () => {
+  importRailTripsFromCsv(importCsvFile.files[0]);
+  importCsvFile.value = "";
 });
 
 viewButtons.forEach((button) => {
@@ -2661,6 +2680,238 @@ function importTrips(file) {
     }
   };
   reader.readAsText(file);
+}
+
+function importRailTripsFromCsv(file) {
+  if (!currentUser) return;
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const records = parseCsvRecords(String(reader.result || ""));
+      const imported = records
+        .map((record, index) => createRailTripFromCsvRecord(record, index))
+        .filter(Boolean);
+
+      if (!imported.length) {
+        window.alert("导入失败：CSV 中没有识别到可登记的铁路行程。");
+        return;
+      }
+
+      const existingKeys = new Set(trips.map(getRailImportKey).filter(Boolean));
+      const nextKeys = new Set();
+      const newTrips = [];
+      let duplicateCount = 0;
+
+      imported.forEach((trip) => {
+        const key = getRailImportKey(trip);
+        if (key && (existingKeys.has(key) || nextKeys.has(key))) {
+          duplicateCount += 1;
+          return;
+        }
+        if (key) nextKeys.add(key);
+        newTrips.push(trip);
+      });
+
+      if (!newTrips.length) {
+        window.alert(`没有新增行程：${duplicateCount} 条记录已存在。`);
+        return;
+      }
+
+      if (!window.confirm(`将从 CSV 导入 ${newTrips.length} 条铁路行程${duplicateCount ? `，跳过 ${duplicateCount} 条重复记录` : ""}，是否继续？`)) return;
+
+      trips = [...newTrips, ...trips].sort(compareTripsByDateDesc);
+      selectedTripId = newTrips[0]?.id || trips[0]?.id;
+      activeFilter = "all";
+      pendingQuickTrip = null;
+      editingTripId = null;
+      document.querySelectorAll(".segment").forEach((button) => {
+        button.classList.toggle("active", button.dataset.filter === "all");
+      });
+      newTrips.forEach(rememberTransportProfile);
+      persistTrips();
+      render();
+      window.alert(`已导入 ${newTrips.length} 条铁路行程${duplicateCount ? `，跳过 ${duplicateCount} 条重复记录` : ""}。`);
+    } catch {
+      window.alert("导入失败：请选择 12306 积分明细 CSV 文件。");
+    }
+  };
+  reader.readAsText(file);
+}
+
+function parseCsvRecords(text) {
+  const rows = parseCsvRows(text.replace(/^\uFEFF/, ""));
+  const dataRows = rows.filter((row) => row.some((cell) => String(cell || "").trim()) && !String(row[0] || "").trim().startsWith("#"));
+  if (dataRows.length < 2) return [];
+
+  const headers = dataRows[0].map(normalizeCsvHeader);
+  return dataRows.slice(1).map((row) => {
+    return headers.reduce((record, header, index) => {
+      if (header) record[header] = String(row[index] || "").trim();
+      return record;
+    }, {});
+  });
+}
+
+function parseCsvRows(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === "," && !inQuotes) {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+      continue;
+    }
+
+    cell += char;
+  }
+
+  row.push(cell);
+  rows.push(row);
+  return rows;
+}
+
+function normalizeCsvHeader(header) {
+  const normalized = String(header || "").trim().toLowerCase().replace(/\s+/g, "_");
+  const aliases = {
+    "交易时间": "trade_time",
+    "积分变动": "point_delta",
+    "收入/支出": "point_delta",
+    "项目": "item",
+    "积分有效期": "points_valid_until",
+    "乘车人": "passenger",
+    "乘车日期": "travel_date",
+    "车次": "train_no",
+    "出发站": "from_station",
+    "上车站": "from_station",
+    "到达站": "to_station",
+    "席别": "seat_class",
+    "车厢号": "coach_no",
+    "订单号": "order_no",
+    "备注": "remark"
+  };
+  return aliases[header] || normalized;
+}
+
+function createRailTripFromCsvRecord(record, index) {
+  const trainNo = pickCsvValue(record, ["train_no", "remark_train_no", "车次"]).toUpperCase();
+  const travelDate = normalizeCsvDate(pickCsvValue(record, ["travel_date", "date", "乘车日期"]));
+  const routeText = pickCsvValue(record, ["route", "区间", "线路"]);
+  const [routeFrom, routeTo] = splitCsvRoute(routeText);
+  const origin = normalizePlace(pickCsvValue(record, ["from_station", "origin", "board_station_name", "出发站"]) || routeFrom);
+  const destination = normalizePlace(pickCsvValue(record, ["to_station", "destination", "arrive_station_name", "到达站"]) || routeTo);
+  const orderNo = pickCsvValue(record, ["order_no", "sequence_no", "订单号"]);
+
+  if (!trainNo || !travelDate || !origin || !destination || origin === "待确认" || destination === "待确认") {
+    return null;
+  }
+
+  const seatClass = pickCsvValue(record, ["seat_class", "seat_type", "席别"]);
+  const coachNo = pickCsvValue(record, ["coach_no", "车厢号"]);
+  const pointDelta = pickCsvValue(record, ["point_delta", "cumulate_point", "trade_point", "积分变动"]);
+  const item = pickCsvValue(record, ["item", "trade_name", "项目"]) || "铁路车票";
+  const pointsValidUntil = normalizeCsvDate(pickCsvValue(record, ["points_valid_until", "stop_date", "积分有效期"]));
+  const tradeTime = pickCsvValue(record, ["trade_time", "trade_date", "交易时间"]);
+  const notes = [
+    "由 12306 积分明细 CSV 导入。",
+    orderNo ? `订单号：${orderNo}` : "",
+    seatClass ? `席别：${seatClass}` : "",
+    coachNo ? `车厢号：${coachNo}` : "",
+    pointDelta ? `积分：${pointDelta}` : "",
+    pointsValidUntil ? `积分有效期：${pointsValidUntil}` : ""
+  ].filter(Boolean).join(" ");
+
+  return {
+    id: createRailCsvTripId(orderNo, trainNo, travelDate, index),
+    mode: "rail",
+    title: trainNo,
+    operator: "中国铁路",
+    origin,
+    destination,
+    routeUserProvided: true,
+    date: travelDate,
+    departureTime: "待确认",
+    arrivalTime: "待确认",
+    distanceKm: estimateDistance(origin, destination),
+    status: "completed",
+    notes,
+    source: "12306-points-csv",
+    sourceOrderNo: orderNo,
+    sourceTradeTime: tradeTime,
+    sourcePointDelta: pointDelta,
+    sourceItem: item,
+    seatClass,
+    coachNo
+  };
+}
+
+function pickCsvValue(record, keys) {
+  for (const key of keys) {
+    const value = record[key] ?? record[normalizeCsvHeader(key)];
+    if (String(value || "").trim()) return String(value).trim();
+  }
+  return "";
+}
+
+function normalizeCsvDate(value) {
+  const raw = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const compact = raw.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (compact) return `${compact[1]}-${compact[2]}-${compact[3]}`;
+  const loose = raw.match(/(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (loose) return `${loose[1]}-${loose[2].padStart(2, "0")}-${loose[3].padStart(2, "0")}`;
+  return "";
+}
+
+function splitCsvRoute(routeText) {
+  const match = String(routeText || "").match(/(.+?)(?:--|->|→|至|到)(.+)/);
+  if (!match) return ["", ""];
+  return [match[1].trim(), match[2].trim()];
+}
+
+function createRailCsvTripId(orderNo, trainNo, travelDate, index) {
+  const stable = String(orderNo || `${travelDate}-${trainNo}-${index + 1}`).replace(/[^a-z0-9_-]/gi, "-");
+  return `trip-12306-${stable}`;
+}
+
+function getRailImportKey(trip) {
+  if (!trip || trip.mode !== "rail") return "";
+  if (trip.sourceOrderNo) return `order:${trip.sourceOrderNo}`;
+  const notesOrder = String(trip.notes || "").match(/订单号：([A-Z0-9]+)/i)?.[1];
+  if (notesOrder) return `order:${notesOrder}`;
+  return `trip:${trip.date}|${trip.title}|${trip.origin}|${trip.destination}`;
+}
+
+function compareTripsByDateDesc(a, b) {
+  const dateCompare = String(b.date || "").localeCompare(String(a.date || ""));
+  if (dateCompare !== 0) return dateCompare;
+  return String(b.title || "").localeCompare(String(a.title || ""));
 }
 
 function getTripStats() {

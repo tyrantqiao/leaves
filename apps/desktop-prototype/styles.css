@@ -272,6 +272,8 @@ button {
 .top-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
 }
 
@@ -327,6 +329,7 @@ button {
 .ghost-button.small {
   padding: 5px 10px;
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .danger-button.small {
@@ -1480,10 +1483,11 @@ button {
 
   .top-actions {
     gap: 6px;
+    row-gap: 5px;
   }
 
   .user-chip {
-    flex: 1;
+    flex: 1 1 100%;
     min-width: 0;
     padding-left: 8px;
   }
