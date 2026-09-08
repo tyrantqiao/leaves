@@ -74087,9 +74087,9 @@ window.LEAVES_AIRPORTS = [
     ]
   },
   {
-    "city": "Naha",
-    "name": "Naha Airport",
-    "place": "Naha Airport",
+    "city": "冲绳",
+    "name": "冲绳那霸机场",
+    "place": "冲绳那霸机场",
     "code": "OKA",
     "icao": "ROAH",
     "country": "JP",
@@ -74099,8 +74099,13 @@ window.LEAVES_AIRPORTS = [
     "scheduled": true,
     "usage": "民用",
     "aliases": [
+      "那霸机场",
+      "冲绳机场",
+      "冲绳那霸",
       "Naha Airport",
       "Naha",
+      "Okinawa",
+      "Okinawa Naha Airport",
       "OKA",
       "ROAH"
     ]
