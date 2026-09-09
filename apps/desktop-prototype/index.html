@@ -184,15 +184,23 @@
       <header class="dialog-header"><h2 id="editorTitle">登记行程</h2><button id="pauseEditor" class="ghost-button" type="button">稍后继续</button></header>
       <div id="editorContent" class="dialog-body"></div>
     </dialog>
-    <dialog id="recordsDialog" class="workspace-dialog" aria-labelledby="recordsTitle">
-      <header class="dialog-header"><h2 id="recordsTitle">全部记录</h2><button class="ghost-button" data-close-dialog type="button">关闭</button></header>
-      <div class="records-filters">
-        <label>车次 / 地点<input id="recordSearch" type="search" placeholder="搜索车次、地点或备注"></label>
-        <label>月份<input id="recordMonth" type="month"></label>
-        <label>方式<select id="recordMode"><option value="all">全部</option><option value="rail">铁路</option><option value="flight">航班</option><option value="ship">轮船</option><option value="road">道路</option></select></label>
-        <button id="clearRecordFilters" class="ghost-button" type="button">清除筛选</button>
+    <dialog id="recordsDialog" class="workspace-dialog records-dialog" aria-labelledby="recordsTitle">
+      <header class="dialog-header">
+        <div class="dialog-title-block">
+          <h2 id="recordsTitle">全部记录</h2>
+          <p id="recordCount" role="status"></p>
+        </div>
+        <button class="ghost-button" data-close-dialog type="button">关闭</button>
+      </header>
+      <div class="records-toolbar">
+        <div class="records-filters">
+          <label><span>车次 / 地点</span><input id="recordSearch" type="search" placeholder="搜索车次、地点或备注"></label>
+          <label><span>月份</span><input id="recordMonth" type="month"></label>
+          <label><span>方式</span><select id="recordMode"><option value="all">全部</option><option value="rail">铁路</option><option value="flight">航班</option><option value="ship">轮船</option><option value="road">道路</option></select></label>
+        </div>
+        <button id="clearRecordFilters" class="ghost-button small" type="button">清除筛选</button>
       </div>
-      <p id="recordCount" role="status"></p><div id="recordList" class="dialog-body"></div>
+      <div id="recordList" class="dialog-body records-list"></div>
     </dialog>
     <dialog id="importDialog" class="workspace-dialog" aria-labelledby="importTitle">
       <header class="dialog-header"><h2 id="importTitle">导入预览</h2><button class="ghost-button" data-close-dialog type="button">取消</button></header>

@@ -3026,7 +3026,19 @@ function renderRecords() {
   const records = trips.filter((trip) => (!month || String(trip.date).startsWith(month)) && (mode === "all" || trip.mode === mode) && (!query || [trip.title, trip.origin, trip.destination, trip.notes].join(" ").toLowerCase().includes(query))).sort(compareTripsByDateDesc);
   document.querySelector("#recordCount").textContent = `找到 ${records.length} 条记录 · 共 ${trips.length} 条`;
   const list = document.querySelector("#recordList");
-  list.innerHTML = records.length ? records.map((trip) => `<button class="record-row" data-record-id="${escapeHtml(trip.id)}" type="button"><span class="record-mode ${trip.mode}">${modeLabel(trip.mode)}</span><span><strong>${escapeHtml(trip.title)} · ${escapeHtml(trip.origin)} → ${escapeHtml(trip.destination)}</strong><small>${escapeHtml(trip.date)} · ${escapeHtml(statusLabel(trip.status))} · ${distanceLabel(trip)}</small></span><span aria-hidden="true">→</span></button>`).join("") : '<p class="empty-records">没有匹配的记录，试试清除筛选。</p>';
+  list.innerHTML = records.length ? records.map((trip) => {
+    const tripMode = trip.mode || "road";
+    const note = String(trip.notes || "").trim();
+    return `<button class="record-row ${escapeHtml(tripMode)}" data-record-id="${escapeHtml(trip.id)}" type="button" aria-label="查看 ${escapeHtml(trip.title)} ${escapeHtml(trip.origin)} 到 ${escapeHtml(trip.destination)}">
+      <span class="record-mode ${escapeHtml(tripMode)}"><i class="mode-dot ${escapeHtml(tripMode)}"></i>${modeLabel(tripMode)}</span>
+      <span class="record-main">
+        <span class="record-title"><strong>${escapeHtml(trip.title)}</strong><span>${escapeHtml(trip.origin)} → ${escapeHtml(trip.destination)}</span></span>
+        <span class="record-meta">${escapeHtml(trip.date)} · ${escapeHtml(statusLabel(trip.status))} · ${distanceLabel(trip)}</span>
+        ${note ? `<span class="record-note">${escapeHtml(note)}</span>` : ""}
+      </span>
+      <span class="record-open" aria-hidden="true"></span>
+    </button>`;
+  }).join("") : '<p class="empty-records">没有匹配的记录，试试清除筛选。</p>';
   list.querySelectorAll("[data-record-id]").forEach((button) => button.addEventListener("click", () => {
     document.querySelector("#recordsDialog").close();
     selectedTripId = button.dataset.recordId;
