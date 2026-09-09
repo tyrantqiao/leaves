@@ -47,6 +47,15 @@ button {
   cursor: pointer;
 }
 
+.file-picker-input {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-100vw, -100vh);
+}
+
 .auth-gate {
   position: fixed;
   inset: 0;

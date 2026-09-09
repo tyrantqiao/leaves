@@ -165,9 +165,9 @@
         </section>
       </main>
     </div>
-    <input id="importJsonFile" type="file" accept="application/json,.json" hidden>
-    <input id="importCsvFile" type="file" accept="text/csv,.csv" hidden>
-    <script src="./airport-data.js?v=20260909-airport-picker"></script>
-    <script src="./app.js?v=20260909-airport-picker" defer></script>
+    <input id="importJsonFile" class="file-picker-input" type="file" accept="application/json,.json" tabindex="-1" aria-hidden="true">
+    <input id="importCsvFile" class="file-picker-input" type="file" accept="text/csv,.csv" tabindex="-1" aria-hidden="true">
+    <script src="./airport-data.js?v=20260909-import-picker"></script>
+    <script src="./app.js?v=20260909-import-picker" defer></script>
   </body>
 </html>

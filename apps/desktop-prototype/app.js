@@ -627,19 +627,19 @@ exportButtons.forEach((button) => button.addEventListener("click", () => {
 }));
 
 importButtons.forEach((button) => button.addEventListener("click", () => {
-  importJsonFile.click();
+  openImportFilePicker(importJsonFile, "JSON");
 }));
 
 importCsvButtons.forEach((button) => button.addEventListener("click", () => {
-  importCsvFile.click();
+  openImportFilePicker(importCsvFile, "CSV");
 }));
 
-importJsonFile.addEventListener("change", () => {
+importJsonFile?.addEventListener("change", () => {
   importTrips(importJsonFile.files[0]);
   importJsonFile.value = "";
 });
 
-importCsvFile.addEventListener("change", () => {
+importCsvFile?.addEventListener("change", () => {
   importRailTripsFromCsv(importCsvFile.files[0]);
   importCsvFile.value = "";
 });
@@ -2656,6 +2656,15 @@ function exportTrips() {
   URL.revokeObjectURL(url);
 }
 
+function openImportFilePicker(fileInput, label) {
+  if (!currentUser) return;
+  if (!fileInput) {
+    window.alert(`导入失败：${label} 文件选择控件未加载，请刷新页面后重试。`);
+    return;
+  }
+  fileInput.click();
+}
+
 function importTrips(file) {
   if (!currentUser) return;
   if (!file) return;
@@ -2678,6 +2687,9 @@ function importTrips(file) {
     } catch {
       window.alert("导入失败：请选择 Leaves 导出的 JSON 文件。");
     }
+  };
+  reader.onerror = () => {
+    window.alert("导入失败：无法读取所选 JSON 文件。");
   };
   reader.readAsText(file);
 }
@@ -2736,6 +2748,9 @@ function importRailTripsFromCsv(file) {
     } catch {
       window.alert("导入失败：请选择 12306 积分明细 CSV 文件。");
     }
+  };
+  reader.onerror = () => {
+    window.alert("导入失败：无法读取所选 CSV 文件。");
   };
   reader.readAsText(file);
 }
