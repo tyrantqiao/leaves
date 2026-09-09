@@ -1,0 +1,766 @@
+{
+  "errors": [],
+  "checks": {
+    "authGatesApp": true,
+    "flightSaved": 1,
+    "railManualSaved": 2,
+    "emptyFilter": {
+      "strip": "暂无行程，先在上方登记一条吧。",
+      "hero": "铁路 · 草稿\n编辑\n删除\n\n上海虹桥→杭州东\n\nG1234\n中国铁路\n2026-09-09\n待确认 - 待确认\n147 km"
+    },
+    "previewAfterTabSwitch": "北京",
+    "skip": {
+      "previewVisible": 0,
+      "tripCount": 2,
+      "input": ""
+    },
+    "smallTargets": [
+      {
+        "text": "行程",
+        "height": 28,
+        "width": 60.65625
+      },
+      {
+        "text": "看板",
+        "height": 28,
+        "width": 60.671875
+      },
+      {
+        "text": "成就",
+        "height": 28,
+        "width": 60.671875
+      },
+      {
+        "text": "识别",
+        "height": 34,
+        "width": 68
+      },
+      {
+        "text": "退出",
+        "height": 28,
+        "width": 42
+      },
+      {
+        "text": "导入CSV",
+        "height": 28,
+        "width": 63.265625
+      },
+      {
+        "text": "导入JSON",
+        "height": 28,
+        "width": 70.6875
+      },
+      {
+        "text": "导出",
+        "height": 28,
+        "width": 42
+      },
+      {
+        "text": "编辑",
+        "height": 28,
+        "width": 42
+      },
+      {
+        "text": "删除",
+        "height": 28,
+        "width": 42
+      },
+      {
+        "text": "全部",
+        "height": 28,
+        "width": 68.390625
+      },
+      {
+        "text": "飞行",
+        "height": 28,
+        "width": 68.40625
+      },
+      {
+        "text": "铁路",
+        "height": 28,
+        "width": 68.390625
+      },
+      {
+        "text": "轮船",
+        "height": 28,
+        "width": 68.40625
+      },
+      {
+        "text": "道路",
+        "height": 28,
+        "width": 68.40625
+      }
+    ],
+    "failedSaveBeforeReload": [
+      "G9999\n铁路\n待确认 → 待确认\n2026-09-09 · 0 km",
+      "G1234\n铁路\n上海虹桥 → 杭州东\n2026-09-09 · 147 km",
+      "CA1234\n航班\n北京首都国际机场 → 上海虹桥国际机场\n2026-09-09 · 1076 km"
+    ],
+    "failedSaveAfterReload": [
+      "G1234\n铁路\n上海虹桥 → 杭州东\n2026-09-09 · 147 km",
+      "CA1234\n航班\n北京首都国际机场 → 上海虹桥国际机场\n2026-09-09 · 1076 km"
+    ]
+  },
+  "layout": [
+    {
+      "name": "desktop-flight-preview",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "documentWidth": 1440,
+      "topbar": {
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 77,
+        "scrollHeight": 76,
+        "clientHeight": 76,
+        "overflowY": "visible"
+      },
+      "hero": {
+        "x": 12,
+        "y": 87,
+        "width": 1416,
+        "height": 659,
+        "scrollHeight": 657,
+        "clientHeight": 657,
+        "overflowY": "hidden"
+      },
+      "strip": {
+        "x": 12,
+        "y": 756,
+        "width": 1416,
+        "height": 134,
+        "scrollHeight": 132,
+        "clientHeight": 132,
+        "overflowY": "visible"
+      },
+      "preview": {
+        "x": 841,
+        "y": 212.8125,
+        "width": 560,
+        "height": 510.1875,
+        "scrollHeight": 508,
+        "clientHeight": 508,
+        "overflowY": "visible"
+      },
+      "save": {
+        "x": 860,
+        "y": 665,
+        "width": 100,
+        "height": 34,
+        "scrollHeight": 34,
+        "clientHeight": 34,
+        "overflowY": "visible"
+      },
+      "input": {
+        "x": 356.875,
+        "y": 19,
+        "width": 326.765625,
+        "height": 38,
+        "scrollHeight": 36,
+        "clientHeight": 36,
+        "overflowY": "clip"
+      },
+      "focus": "BUTTON"
+    },
+    {
+      "name": "desktop-home",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "documentWidth": 1440,
+      "topbar": {
+        "x": 0,
+        "y": 0,
+        "width": 1440,
+        "height": 77,
+        "scrollHeight": 76,
+        "clientHeight": 76,
+        "overflowY": "visible"
+      },
+      "hero": {
+        "x": 12,
+        "y": 87,
+        "width": 1416,
+        "height": 655,
+        "scrollHeight": 653,
+        "clientHeight": 653,
+        "overflowY": "hidden"
+      },
+      "strip": {
+        "x": 12,
+        "y": 752,
+        "width": 1416,
+        "height": 138,
+        "scrollHeight": 136,
+        "clientHeight": 136,
+        "overflowY": "visible"
+      },
+      "preview": null,
+      "save": null,
+      "input": {
+        "x": 356.875,
+        "y": 19,
+        "width": 326.765625,
+        "height": 38,
+        "scrollHeight": 36,
+        "clientHeight": 36,
+        "overflowY": "clip"
+      },
+      "focus": "BODY"
+    },
+    {
+      "name": "home-1366x768",
+      "viewport": {
+        "width": 1366,
+        "height": 768
+      },
+      "documentWidth": 1366,
+      "topbar": {
+        "x": 0,
+        "y": 0,
+        "width": 1366,
+        "height": 77,
+        "scrollHeight": 76,
+        "clientHeight": 76,
+        "overflowY": "visible"
+      },
+      "hero": {
+        "x": 12,
+        "y": 87,
+        "width": 1342,
+        "height": 523,
+        "scrollHeight": 521,
+        "clientHeight": 521,
+        "overflowY": "hidden"
+      },
+      "strip": {
+        "x": 12,
+        "y": 620,
+        "width": 1342,
+        "height": 138,
+        "scrollHeight": 136,
+        "clientHeight": 136,
+        "overflowY": "visible"
+      },
+      "preview": null,
+      "save": null,
+      "input": {
+        "x": 356.875,
+        "y": 19,
+        "width": 252.765625,
+        "height": 38,
+        "scrollHeight": 36,
+        "clientHeight": 36,
+        "overflowY": "clip"
+      },
+      "focus": "BODY"
+    },
+    {
+      "name": "preview-1366x768",
+      "viewport": {
+        "width": 1366,
+        "height": 768
+      },
+      "documentWidth": 1366,
+      "topbar": {
+        "x": 0,
+        "y": 0,
+        "width": 1366,
+        "height": 77,
+        "scrollHeight": 76,
+        "clientHeight": 76,
+        "overflowY": "visible"
+      },
+      "hero": {
+        "x": 12,
+        "y": 87,
+        "width": 1342,
+        "height": 523,
+        "scrollHeight": 521,
+        "clientHeight": 521,
+        "overflowY": "hidden"
+      },
+      "strip": {
+        "x": 12,
+        "y": 620,
+        "width": 1342,
+        "height": 138,
+        "scrollHeight": 136,
+        "clientHeight": 136,
+        "overflowY": "visible"
+      },
+      "preview": {
+        "x": 767,
+        "y": 76.8125,
+        "width": 560,
+        "height": 510.1875,
+        "scrollHeight": 508,
+        "clientHeight": 508,
+        "overflowY": "visible"
+      },
+      "save": {
+        "x": 786,
+        "y": 529,
+        "width": 100,
+        "height": 34,
+        "scrollHeight": 34,
+        "clientHeight": 34,
+        "overflowY": "visible"
+      },
+      "input": {
+        "x": 356.875,
+        "y": 19,
+        "width": 252.765625,
+        "height": 38,
+        "scrollHeight": 36,
+        "clientHeight": 36,
+        "overflowY": "clip"
+      },
+      "focus": "BUTTON"
+    },
+    {
+      "name": "home-1080x740",
+      "viewport": {
+        "width": 1080,
+        "height": 740
+      },
+      "documentWidth": 1080,
+      "topbar": {
+        "x": 0,
+        "y": 0,
+        "width": 1080,
+        "height": 161,
+        "scrollHeight": 160,
+        "clientHeight": 160,
+        "overflowY": "visible"
+      },
+      "hero": {
+        "x": 12,
+        "y": 171,
+        "width": 1056,
+        "height": 411,
+        "scrollHeight": 409,
+        "clientHeight": 409,
+        "overflowY": "hidden"
+      },
+      "strip": {
+        "x": 12,
+        "y": 592,
+        "width": 1056,
+        "height": 138,
+        "scrollHeight": 136,
+        "clientHeight": 136,
+        "overflowY": "visible"
+      },
+      "preview": null,
+      "save": null,
+      "input": {
+        "x": 19,
+        "y": 65,
+        "width": 716,
+        "height": 38,
+        "scrollHeight": 36,
+        "clientHeight": 36,
+        "overflowY": "clip"
+      },
+      "focus": "BODY"
+    },
+    {
+      "name": "preview-1080x740",
+      "viewport": {
+        "width": 1080,
+        "height": 740
+      },
+      "documentWidth": 1080,
+      "topbar": {
+        "x": 0,
+        "y": 0,
+        "width": 1080,
+        "height": 161,
+        "scrollHeight": 160,
+        "clientHeight": 160,
+        "overflowY": "visible"
+      },
+      "hero": {
+        "x": 12,
+        "y": 171,
+        "width": 1056,
+        "height": 411,
+        "scrollHeight": 409,
+        "clientHeight": 409,
+        "overflowY": "hidden"
+      },
+      "strip": {
+        "x": 12,
+        "y": 592,
+        "width": 1056,
+        "height": 138,
+        "scrollHeight": 136,
+        "clientHeight": 136,
+        "overflowY": "visible"
+      },
+      "preview": {
+        "x": 481,
+        "y": 48.8125,
+        "width": 560,
+        "height": 510.1875,
+        "scrollHeight": 508,
+        "clientHeight": 508,
+        "overflowY": "visible"
+      },
+      "save": {
+        "x": 500,
+        "y": 501,
+        "width": 100,
+        "height": 34,
+        "scrollHeight": 34,
+        "clientHeight": 34,
+        "overflowY": "visible"
+      },
+      "input": {
+        "x": 19,
+        "y": 65,
+        "width": 716,
+        "height": 38,
+        "scrollHeight": 36,
+        "clientHeight": 36,
+        "overflowY": "clip"
+      },
+      "focus": "BUTTON"
+    },
+    {
+      "name": "home-360x640",
+      "viewport": {
+        "width": 360,
+        "height": 640
+      },
+      "documentWidth": 360,
+      "topbar": {
+        "x": 0,
+        "y": 0,
+        "width": 360,
+        "height": 214,
+        "scrollHeight": 213,
+        "clientHeight": 213,
+        "overflowY": "visible"
+      },
+      "hero": {
+        "x": 6,
+        "y": 220,
+        "width": 348,
+        "height": 265,
+        "scrollHeight": 263,
+        "clientHeight": 263,
+        "overflowY": "hidden"
+      },
+      "strip": {
+        "x": 6,
+        "y": 493,
+        "width": 348,
+        "height": 141,
+        "scrollHeight": 139,
+        "clientHeight": 139,
+        "overflowY": "visible"
+      },
+      "preview": null,
+      "save": null,
+      "input": {
+        "x": 14,
+        "y": 58,
+        "width": 332,
+        "height": 32,
+        "scrollHeight": 30,
+        "clientHeight": 30,
+        "overflowY": "clip"
+      },
+      "focus": "BODY"
+    },
+    {
+      "name": "preview-360x640",
+      "viewport": {
+        "width": 360,
+        "height": 640
+      },
+      "documentWidth": 360,
+      "topbar": {
+        "x": 0,
+        "y": 0,
+        "width": 360,
+        "height": 214,
+        "scrollHeight": 213,
+        "clientHeight": 213,
+        "overflowY": "visible"
+      },
+      "hero": {
+        "x": 6,
+        "y": 220,
+        "width": 348,
+        "height": 265,
+        "scrollHeight": 263,
+        "clientHeight": 263,
+        "overflowY": "hidden"
+      },
+      "strip": {
+        "x": 6,
+        "y": 493,
+        "width": 348,
+        "height": 141,
+        "scrollHeight": 139,
+        "clientHeight": 139,
+        "overflowY": "visible"
+      },
+      "preview": {
+        "x": 19,
+        "y": -26.1875,
+        "width": 322,
+        "height": 498.1875,
+        "scrollHeight": 496,
+        "clientHeight": 496,
+        "overflowY": "visible"
+      },
+      "save": {
+        "x": 32,
+        "y": 420,
+        "width": 131,
+        "height": 34,
+        "scrollHeight": 34,
+        "clientHeight": 34,
+        "overflowY": "visible"
+      },
+      "input": {
+        "x": 14,
+        "y": 58,
+        "width": 332,
+        "height": 32,
+        "scrollHeight": 30,
+        "clientHeight": 30,
+        "overflowY": "clip"
+      },
+      "focus": "BUTTON"
+    },
+    {
+      "name": "home-390x740",
+      "viewport": {
+        "width": 390,
+        "height": 740
+      },
+      "documentWidth": 390,
+      "topbar": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 218,
+        "scrollHeight": 217,
+        "clientHeight": 217,
+        "overflowY": "visible"
+      },
+      "hero": {
+        "x": 8,
+        "y": 226,
+        "width": 374,
+        "height": 347,
+        "scrollHeight": 345,
+        "clientHeight": 345,
+        "overflowY": "hidden"
+      },
+      "strip": {
+        "x": 8,
+        "y": 581,
+        "width": 374,
+        "height": 151,
+        "scrollHeight": 149,
+        "clientHeight": 149,
+        "overflowY": "visible"
+      },
+      "preview": null,
+      "save": null,
+      "input": {
+        "x": 14,
+        "y": 58,
+        "width": 362,
+        "height": 34,
+        "scrollHeight": 32,
+        "clientHeight": 32,
+        "overflowY": "clip"
+      },
+      "focus": "BODY"
+    },
+    {
+      "name": "preview-390x740",
+      "viewport": {
+        "width": 390,
+        "height": 740
+      },
+      "documentWidth": 390,
+      "topbar": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 218,
+        "scrollHeight": 217,
+        "clientHeight": 217,
+        "overflowY": "visible"
+      },
+      "hero": {
+        "x": 8,
+        "y": 226,
+        "width": 374,
+        "height": 347,
+        "scrollHeight": 345,
+        "clientHeight": 345,
+        "overflowY": "hidden"
+      },
+      "strip": {
+        "x": 8,
+        "y": 581,
+        "width": 374,
+        "height": 151,
+        "scrollHeight": 149,
+        "clientHeight": 149,
+        "overflowY": "visible"
+      },
+      "preview": {
+        "x": 21,
+        "y": 61.8125,
+        "width": 348,
+        "height": 498.1875,
+        "scrollHeight": 496,
+        "clientHeight": 496,
+        "overflowY": "visible"
+      },
+      "save": {
+        "x": 34,
+        "y": 508,
+        "width": 144,
+        "height": 34,
+        "scrollHeight": 34,
+        "clientHeight": 34,
+        "overflowY": "visible"
+      },
+      "input": {
+        "x": 14,
+        "y": 58,
+        "width": 362,
+        "height": 34,
+        "scrollHeight": 32,
+        "clientHeight": 32,
+        "overflowY": "clip"
+      },
+      "focus": "BUTTON"
+    },
+    {
+      "name": "home-430x740",
+      "viewport": {
+        "width": 430,
+        "height": 740
+      },
+      "documentWidth": 430,
+      "topbar": {
+        "x": 0,
+        "y": 0,
+        "width": 430,
+        "height": 218,
+        "scrollHeight": 217,
+        "clientHeight": 217,
+        "overflowY": "visible"
+      },
+      "hero": {
+        "x": 8,
+        "y": 226,
+        "width": 414,
+        "height": 347,
+        "scrollHeight": 345,
+        "clientHeight": 345,
+        "overflowY": "hidden"
+      },
+      "strip": {
+        "x": 8,
+        "y": 581,
+        "width": 414,
+        "height": 151,
+        "scrollHeight": 149,
+        "clientHeight": 149,
+        "overflowY": "visible"
+      },
+      "preview": null,
+      "save": null,
+      "input": {
+        "x": 14,
+        "y": 58,
+        "width": 402,
+        "height": 34,
+        "scrollHeight": 32,
+        "clientHeight": 32,
+        "overflowY": "clip"
+      },
+      "focus": "BODY"
+    },
+    {
+      "name": "preview-430x740",
+      "viewport": {
+        "width": 430,
+        "height": 740
+      },
+      "documentWidth": 430,
+      "topbar": {
+        "x": 0,
+        "y": 0,
+        "width": 430,
+        "height": 218,
+        "scrollHeight": 217,
+        "clientHeight": 217,
+        "overflowY": "visible"
+      },
+      "hero": {
+        "x": 8,
+        "y": 226,
+        "width": 414,
+        "height": 347,
+        "scrollHeight": 345,
+        "clientHeight": 345,
+        "overflowY": "hidden"
+      },
+      "strip": {
+        "x": 8,
+        "y": 581,
+        "width": 414,
+        "height": 151,
+        "scrollHeight": 149,
+        "clientHeight": 149,
+        "overflowY": "visible"
+      },
+      "preview": {
+        "x": 21,
+        "y": 61.8125,
+        "width": 388,
+        "height": 498.1875,
+        "scrollHeight": 496,
+        "clientHeight": 496,
+        "overflowY": "visible"
+      },
+      "save": {
+        "x": 34,
+        "y": 508,
+        "width": 164,
+        "height": 34,
+        "scrollHeight": 34,
+        "clientHeight": 34,
+        "overflowY": "visible"
+      },
+      "input": {
+        "x": 14,
+        "y": 58,
+        "width": 402,
+        "height": 34,
+        "scrollHeight": 32,
+        "clientHeight": 32,
+        "overflowY": "clip"
+      },
+      "focus": "BUTTON"
+    }
+  ]
+}

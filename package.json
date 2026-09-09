@@ -5,7 +5,9 @@
   "description": "Leaves 个人出行记录软件 - 桌面原型开发服务器",
   "scripts": {
     "start": "node apps/desktop-prototype/dev-server.js",
-    "dev": "node apps/desktop-prototype/dev-server.js"
+    "dev": "node apps/desktop-prototype/dev-server.js",
+    "test": "node scripts/test-trip-store.cjs",
+    "test:ui": "node scripts/verify-ux.cjs"
   },
   "engines": {
     "node": ">=16"

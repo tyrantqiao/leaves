@@ -6,6 +6,7 @@ const zlib = require("zlib");
 const ticketService = require("./server/ticket-service");
 const stationService = require("./server/station-service");
 const { createAuthService } = require("./server/auth-service");
+const { readTrips, writeTrips } = require("./server/trip-storage");
 
 const root = __dirname;
 const port = Number(process.env.LEAVES_PORT || 4173);
@@ -112,7 +113,8 @@ function setResponseHeaders(response, request) {
     response.setHeader("Access-Control-Allow-Credentials", "true");
   }
   response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
-  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type, If-Match");
+  response.setHeader("Access-Control-Expose-Headers", "ETag");
 }
 
 function readJsonBody(request) {
@@ -219,17 +221,13 @@ async function handleApiRequest(request, response, pathname, searchParams) {
     const tripsFile = tripsFileForUser(user);
 
     if (request.method === "GET") {
-      fs.readFile(tripsFile, (error, data) => {
-        if (error) {
-          sendJson(response, 200, []);
-          return;
-        }
-        response.writeHead(200, {
-          "Content-Type": "application/json; charset=utf-8",
-          "Cache-Control": "no-store"
-        });
-        response.end(data);
-      });
+      try {
+        const result = await readTrips(tripsFile);
+        response.setHeader("ETag", result.etag);
+        sendJson(response, 200, result.trips);
+      } catch {
+        sendJson(response, 500, { success: false, error: "无法读取行程文件，原有记录保持不变" });
+      }
       return true;
     }
 
@@ -244,14 +242,13 @@ async function handleApiRequest(request, response, pathname, searchParams) {
           sendJson(response, 400, { success: false, error: "请求体必须是行程数组" });
           return true;
         }
-        fs.mkdirSync(path.dirname(tripsFile), { recursive: true });
-        fs.writeFile(tripsFile, JSON.stringify(body, null, 2), (error) => {
-          if (error) {
-            sendJson(response, 500, { success: false, error: `写入失败: ${error.message}` });
-            return;
-          }
+        try {
+          const result = await writeTrips(tripsFile, body, request.headers["if-match"]);
+          response.setHeader("ETag", result.etag);
           sendJson(response, 200, { success: true, saved: body.length });
-        });
+        } catch (error) {
+          sendJson(response, error.status || 500, { success: false, error: error.status === 412 ? error.message : "保存失败，原有记录保持不变，请重试" });
+        }
       } catch (e) {
         sendJson(response, 400, { success: false, error: e.message });
       }

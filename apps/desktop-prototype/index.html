@@ -18,10 +18,10 @@
           </div>
         </div>
         <div class="auth-tabs" role="tablist" aria-label="账号操作">
-          <button id="loginTab" class="auth-tab active" data-auth-mode="login" type="button">登录</button>
-          <button id="registerTab" class="auth-tab" data-auth-mode="register" type="button">注册</button>
+          <button id="loginTab" class="auth-tab active" data-auth-mode="login" type="button" role="tab" aria-selected="true">登录</button>
+          <button id="registerTab" class="auth-tab" data-auth-mode="register" type="button" role="tab" aria-selected="false" tabindex="-1">注册</button>
         </div>
-        <form id="authForm" class="auth-form">
+        <form id="authForm" class="auth-form" role="tabpanel" aria-labelledby="loginTab">
           <label class="auth-field" for="authUsername">
             <span>账号名</span>
             <input id="authUsername" name="username" autocomplete="username" placeholder="your_name" required>
@@ -53,7 +53,7 @@
         </nav>
         <form id="quickAddForm" class="quick-add" aria-label="快速登记">
           <label class="input-label" for="tripInput">行程输入</label>
-          <input id="tripInput" name="tripInput" autocomplete="off" placeholder="输入航班号 / 车次号 / 路线，如 CA1234、G1234、上海虹桥 到 杭州东">
+          <input id="tripInput" name="tripInput" autocomplete="off" placeholder="车次、航班号或 出发地 到 目的地" required>
           <label class="input-label" for="tripMode">交通方式</label>
           <select id="tripMode" name="tripMode" title="交通方式（默认自动识别）">
             <option value="auto" selected>自动</option>
@@ -64,18 +64,31 @@
           </select>
           <label class="input-label" for="tripDate">日期</label>
           <input id="tripDate" name="tripDate" type="date">
-          <button class="primary-button" type="submit">识别</button>
+          <button class="primary-button" type="submit">登记</button>
         </form>
         <div class="top-actions">
+          <button id="openQuickAdd" class="ghost-button" type="button">＋ 登记</button>
+          <details id="moreMenu" class="more-menu">
+          <summary>更多</summary>
+          <div class="more-menu-panel">
           <div class="user-chip" title="当前账号">
             <span id="currentUserName" class="user-name" title="当前账号"></span>
             <button id="logoutButton" class="ghost-button small" type="button">退出</button>
           </div>
-          <button class="ghost-button small import-csv" type="button">导入CSV</button>
-          <button class="ghost-button small import-json" type="button">导入JSON</button>
-          <button class="ghost-button small export-json" type="button">导出</button>
+          <button class="ghost-button import-csv" type="button">导入铁路记录（CSV）</button>
+          <button class="ghost-button import-json" type="button">恢复备份（JSON）</button>
+          <button class="ghost-button export-json" type="button">导出当前记录</button>
+          <button id="restorePrevious" class="ghost-button" type="button">恢复操作前的备份</button>
+          </div>
+          </details>
         </div>
       </header>
+      <div class="save-bar">
+        <span id="saveStatus" role="status" aria-live="polite">正在同步…</span>
+        <button id="retrySave" type="button" hidden>重试</button>
+        <button id="resumeDraft" type="button" hidden>继续未完成的登记</button>
+      </div>
+      <p id="appNotice" class="app-notice" role="status" hidden></p>
 
       <main class="main">
         <section id="homeView" class="app-view home-view" data-view-panel="home" role="tabpanel" aria-labelledby="homeTab">
@@ -100,6 +113,7 @@
                 <button class="segment" data-filter="road" type="button">道路</button>
               </div>
               <span id="tileSourceLabel" class="tile-source"></span>
+              <button id="allRecords" class="ghost-button small" type="button">全部记录</button>
               <span id="statsLine" class="stats-line"></span>
             </div>
             <div id="tripStrip" class="trip-strip" aria-label="近期行程"></div>
@@ -128,8 +142,8 @@
 
             <section class="insight-panel" aria-labelledby="monthlyTimelineTitle">
               <div class="panel-head">
-                <h3 id="monthlyTimelineTitle">月份走势</h3>
-                <span>近 6 个月</span>
+                <h3 id="monthlyTimelineTitle">月度里程</h3>
+                <span id="monthlyRange">近 6 个月</span>
               </div>
               <div id="monthlyTimeline" class="timeline-bars"></div>
             </section>
@@ -161,13 +175,34 @@
             <span id="achievementLevel" class="page-summary">Lv. 0</span>
           </div>
           <div id="achievementProgress" class="achievement-progress" aria-label="成就进度"></div>
+          <button id="toggleAchievements" class="ghost-button" type="button" aria-expanded="false">查看全部成就</button>
           <div id="achievementGrid" class="achievement-grid" aria-label="成就列表"></div>
         </section>
       </main>
     </div>
+    <dialog id="tripEditor" class="workspace-dialog" aria-labelledby="editorTitle">
+      <header class="dialog-header"><h2 id="editorTitle">登记行程</h2><button id="pauseEditor" class="ghost-button" type="button">稍后继续</button></header>
+      <div id="editorContent" class="dialog-body"></div>
+    </dialog>
+    <dialog id="recordsDialog" class="workspace-dialog" aria-labelledby="recordsTitle">
+      <header class="dialog-header"><h2 id="recordsTitle">全部记录</h2><button class="ghost-button" data-close-dialog type="button">关闭</button></header>
+      <div class="records-filters">
+        <label>车次 / 地点<input id="recordSearch" type="search" placeholder="搜索车次、地点或备注"></label>
+        <label>月份<input id="recordMonth" type="month"></label>
+        <label>方式<select id="recordMode"><option value="all">全部</option><option value="rail">铁路</option><option value="flight">航班</option><option value="ship">轮船</option><option value="road">道路</option></select></label>
+        <button id="clearRecordFilters" class="ghost-button" type="button">清除筛选</button>
+      </div>
+      <p id="recordCount" role="status"></p><div id="recordList" class="dialog-body"></div>
+    </dialog>
+    <dialog id="importDialog" class="workspace-dialog" aria-labelledby="importTitle">
+      <header class="dialog-header"><h2 id="importTitle">导入预览</h2><button class="ghost-button" data-close-dialog type="button">取消</button></header>
+      <div id="importPreview" class="dialog-body"></div>
+      <footer class="dialog-footer"><button id="confirmImport" class="primary-button" type="button">确认导入</button></footer>
+    </dialog>
     <input id="importJsonFile" class="file-picker-input" type="file" accept="application/json,.json" tabindex="-1" aria-hidden="true">
     <input id="importCsvFile" class="file-picker-input" type="file" accept="text/csv,.csv" tabindex="-1" aria-hidden="true">
     <script src="./airport-data.js?v=20260909-import-picker"></script>
-    <script src="./app.js?v=20260909-import-picker" defer></script>
+    <script src="./trip-store.js?v=20260909-ux" defer></script>
+    <script src="./app.js?v=20260909-ux" defer></script>
   </body>
 </html>
