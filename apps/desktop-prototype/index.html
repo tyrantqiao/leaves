@@ -185,16 +185,17 @@
       <div id="editorContent" class="dialog-body"></div>
     </dialog>
     <dialog id="recordsDialog" class="workspace-dialog records-dialog" aria-labelledby="recordsTitle">
+      <div class="sheet-grabber" aria-hidden="true"></div>
       <header class="dialog-header">
         <div class="dialog-title-block">
           <h2 id="recordsTitle">全部记录</h2>
           <p id="recordCount" role="status"></p>
         </div>
-        <button class="ghost-button" data-close-dialog type="button">关闭</button>
+        <button class="ghost-button records-close" data-close-dialog type="button" aria-label="关闭全部记录">关闭</button>
       </header>
       <div class="records-toolbar">
-        <div class="records-filters">
-          <label><span>车次 / 地点</span><input id="recordSearch" type="search" placeholder="搜索车次、地点或备注"></label>
+        <div class="records-filters" aria-label="记录筛选">
+          <label class="record-search-field"><span>搜索</span><input id="recordSearch" type="search" placeholder="车次、地点或备注"></label>
           <label><span>月份</span><input id="recordMonth" type="month"></label>
           <label><span>方式</span><select id="recordMode"><option value="all">全部</option><option value="rail">铁路</option><option value="flight">航班</option><option value="ship">轮船</option><option value="road">道路</option></select></label>
         </div>

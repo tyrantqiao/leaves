@@ -3024,21 +3024,10 @@ function renderRecords() {
   const month = document.querySelector("#recordMonth").value;
   const mode = document.querySelector("#recordMode").value;
   const records = trips.filter((trip) => (!month || String(trip.date).startsWith(month)) && (mode === "all" || trip.mode === mode) && (!query || [trip.title, trip.origin, trip.destination, trip.notes].join(" ").toLowerCase().includes(query))).sort(compareTripsByDateDesc);
-  document.querySelector("#recordCount").textContent = `找到 ${records.length} 条记录 · 共 ${trips.length} 条`;
+  const countText = records.length === trips.length ? `共 ${trips.length} 条行程` : `找到 ${records.length} 条 · 共 ${trips.length} 条`;
+  document.querySelector("#recordCount").textContent = countText;
   const list = document.querySelector("#recordList");
-  list.innerHTML = records.length ? records.map((trip) => {
-    const tripMode = trip.mode || "road";
-    const note = String(trip.notes || "").trim();
-    return `<button class="record-row ${escapeHtml(tripMode)}" data-record-id="${escapeHtml(trip.id)}" type="button" aria-label="查看 ${escapeHtml(trip.title)} ${escapeHtml(trip.origin)} 到 ${escapeHtml(trip.destination)}">
-      <span class="record-mode ${escapeHtml(tripMode)}"><i class="mode-dot ${escapeHtml(tripMode)}"></i>${modeLabel(tripMode)}</span>
-      <span class="record-main">
-        <span class="record-title"><strong>${escapeHtml(trip.title)}</strong><span>${escapeHtml(trip.origin)} → ${escapeHtml(trip.destination)}</span></span>
-        <span class="record-meta">${escapeHtml(trip.date)} · ${escapeHtml(statusLabel(trip.status))} · ${distanceLabel(trip)}</span>
-        ${note ? `<span class="record-note">${escapeHtml(note)}</span>` : ""}
-      </span>
-      <span class="record-open" aria-hidden="true"></span>
-    </button>`;
-  }).join("") : '<p class="empty-records">没有匹配的记录，试试清除筛选。</p>';
+  list.innerHTML = records.length ? renderRecordGroups(records) : '<p class="empty-records">没有匹配的记录，试试清除筛选。</p>';
   list.querySelectorAll("[data-record-id]").forEach((button) => button.addEventListener("click", () => {
     document.querySelector("#recordsDialog").close();
     selectedTripId = button.dataset.recordId;
@@ -3047,6 +3036,52 @@ function renderRecords() {
     setFilter("all");
     heroOverlay.querySelector('[data-action="edit"]')?.focus();
   }));
+}
+
+function renderRecordGroups(records) {
+  const groups = [];
+  records.forEach((trip) => {
+    const date = parseTripDate(trip.date);
+    const key = date ? formatMonthKey(date) : "unknown";
+    let group = groups[groups.length - 1];
+    if (!group || group.key !== key) {
+      group = {
+        key,
+        label: date ? `${date.getFullYear()}年${date.getMonth() + 1}月` : "日期待确认",
+        items: []
+      };
+      groups.push(group);
+    }
+    group.items.push(trip);
+  });
+  return groups.map((group) => `
+    <section class="record-section" aria-label="${escapeHtml(group.label)}">
+      <div class="record-section-head"><span>${escapeHtml(group.label)}</span><small>${group.items.length} 条</small></div>
+      <div class="record-group">
+        ${group.items.map(renderRecordRow).join("")}
+      </div>
+    </section>
+  `).join("");
+}
+
+function renderRecordRow(trip) {
+  const tripMode = trip.mode || "road";
+  const note = String(trip.notes || "").trim();
+  const isSelected = trip.id === selectedTripId;
+  return `<button class="record-row ${escapeHtml(tripMode)}${isSelected ? " active" : ""}" data-record-id="${escapeHtml(trip.id)}" type="button" aria-label="查看 ${escapeHtml(trip.title)} ${escapeHtml(trip.origin)} 到 ${escapeHtml(trip.destination)}" aria-current="${isSelected ? "true" : "false"}">
+      <span class="record-date"><strong>${escapeHtml(formatRecordDay(trip.date))}</strong><small>${escapeHtml(modeLabel(tripMode))}</small></span>
+      <span class="record-main">
+        <span class="record-title"><strong>${escapeHtml(trip.origin)} → ${escapeHtml(trip.destination)}</strong><span>${escapeHtml(trip.title)}</span></span>
+        <span class="record-meta"><i class="mode-dot ${escapeHtml(tripMode)}"></i>${escapeHtml(statusLabel(trip.status))} · ${distanceLabel(trip)}</span>
+        ${note ? `<span class="record-note">${escapeHtml(note)}</span>` : ""}
+      </span>
+      <span class="record-open" aria-hidden="true"></span>
+    </button>`;
+}
+
+function formatRecordDay(value) {
+  const date = parseTripDate(value);
+  return date ? String(date.getDate()).padStart(2, "0") : "--";
 }
 function setupWorkspaceInteractions() {
   const resizeWorkspace = () => {
