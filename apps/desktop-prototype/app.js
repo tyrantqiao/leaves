@@ -243,6 +243,24 @@ const places = {
   "黄山": { lat: 29.7147, lng: 118.3376 }
 };
 
+const railStationData = Array.isArray(window.LEAVES_RAIL_STATIONS) ? window.LEAVES_RAIL_STATIONS : [];
+const commonRailStations = railStationData.map(normalizeRailStationRecord).filter(Boolean);
+const railStationAliasMap = commonRailStations.reduce((map, station) => {
+  railStationAliases(station).forEach((alias) => {
+    if (!alias) return;
+    if (!map.has(alias)) map.set(alias, station);
+    const withoutStationSuffix = alias.replace(/站$/, "");
+    if (withoutStationSuffix && withoutStationSuffix !== alias && !map.has(withoutStationSuffix)) {
+      map.set(withoutStationSuffix, station);
+    }
+    const lowercaseAlias = alias.toLowerCase();
+    if (/^[a-z0-9 .,'()&-]+$/i.test(alias) && !map.has(lowercaseAlias)) {
+      map.set(lowercaseAlias, station);
+    }
+  });
+  return map;
+}, new Map());
+
 const coreAirportFallbacks = [
   { city: "北京", name: "北京首都机场", place: "北京首都机场", code: "PEK", aliases: ["首都机场", "北京首都国际机场"], lat: 40.0801, lng: 116.5846 },
   { city: "北京", name: "北京大兴机场", place: "北京大兴机场", code: "PKX", aliases: ["大兴机场", "北京大兴国际机场"], lat: 39.5098, lng: 116.4105 },
@@ -304,6 +322,35 @@ function normalizeAirportRecord(airport) {
   };
 }
 
+function normalizeRailStationRecord(record) {
+  const source = Array.isArray(record)
+    ? { country: record[0], name: record[1], lng: record[2], lat: record[3], aliases: record[4] }
+    : record;
+  const name = String(source?.name || "").trim();
+  const lat = Number(source?.lat);
+  const lng = Number(source?.lng);
+  if (!name || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return {
+    country: String(source.country || "").trim(),
+    name,
+    lat,
+    lng,
+    aliases: Array.isArray(source.aliases) ? source.aliases.filter(Boolean) : []
+  };
+}
+
+function railStationAliases(station) {
+  return [...new Set([
+    station.name,
+    `${station.name}站`,
+    ...station.aliases
+  ].filter(Boolean))];
+}
+
+function railStationCoordinate(station) {
+  return { lat: station.lat, lng: station.lng };
+}
+
 commonAirports.forEach((airport) => {
   if (!airport || !Number.isFinite(airport.lat) || !Number.isFinite(airport.lng)) return;
   const coordinate = { lat: airport.lat, lng: airport.lng };
@@ -325,21 +372,38 @@ const airportAliasMap = commonAirports.reduce((map, airport) => {
   return map;
 }, new Map());
 
-/** 站名 → 坐标：精确匹配车站/城市，找不到时去掉方位后缀回退到城市（如 合肥南→合肥）。 */
-function resolvePlace(name) {
+function resolveRailStationAlias(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return null;
+  return railStationAliasMap.get(trimmed) ||
+    railStationAliasMap.get(trimmed.replace(/站$/, "")) ||
+    railStationAliasMap.get(trimmed.toLowerCase()) ||
+    null;
+}
+
+/** 地名 → 坐标：铁路路线优先车站坐标；普通路线保留城市/机场优先，并用车站坐标兜底。 */
+function resolvePlace(name, options = {}) {
   if (!name) return null;
-  if (places[name]) return places[name];
-  const airport = airportAliasMap.get(name);
+  const rawName = String(name).trim();
+  const railStation = resolveRailStationAlias(rawName);
+  if (options.preferRail && railStation) return railStationCoordinate(railStation);
+  if (places[rawName]) return places[rawName];
+  if (railStation) return railStationCoordinate(railStation);
+  const airport = airportAliasMap.get(rawName);
   if (airport && places[airport.place]) return places[airport.place];
   const candidates = [
-    name.replace(/站$/, ""),
-    name.replace(/(南|北|东|西|虹桥|机场)$/, ""),
-    name.replace(/(南|北|东|西|虹桥|机场)站$/, "")
+    rawName.replace(/站$/, ""),
+    rawName.replace(/(南|北|东|西|虹桥|机场)$/, ""),
+    rawName.replace(/(南|北|东|西|虹桥|机场)站$/, "")
   ];
   for (const candidate of candidates) {
-    if (candidate && candidate !== name && places[candidate]) {
+    if (!candidate || candidate === rawName) continue;
+    const candidateRailStation = resolveRailStationAlias(candidate);
+    if (options.preferRail && candidateRailStation) return railStationCoordinate(candidateRailStation);
+    if (places[candidate]) {
       return places[candidate];
     }
+    if (candidateRailStation) return railStationCoordinate(candidateRailStation);
   }
   return null;
 }
@@ -518,6 +582,7 @@ let currentUser = null;
 let trips = [];
 let activeFilter = "all";
 let selectedTripId = null;
+let focusedMapTripId = null;
 let currentView = "home";
 let tripStore = null;
 let editorTrip = null;
@@ -1133,6 +1198,7 @@ function createTripDraft(rawText, date, explicitMode = "auto") {
   const reusable = getReusableServiceProfile(mode, serviceNumber);
   const reusedRoute = !route.userProvided && reusable?.origin && reusable?.destination;
   const reusedTimes = !times.departureTime && !times.arrivalTime && reusable;
+  const distanceOptions = distanceOptionsForMode(mode);
 
   return {
     id: `trip-${crypto.randomUUID()}`,
@@ -1145,7 +1211,7 @@ function createTripDraft(rawText, date, explicitMode = "auto") {
     date,
     departureTime: times.departureTime || (reusedTimes && reusable.departureTime) || "待确认",
     arrivalTime: times.arrivalTime || (reusedTimes && reusable.arrivalTime) || "待确认",
-    distanceKm: reusedRoute ? reusable.distanceKm || estimateDistance(reusable.origin, reusable.destination) : estimateDistance(route.origin, route.destination),
+    distanceKm: reusedRoute ? reusable.distanceKm || estimateDistance(reusable.origin, reusable.destination, distanceOptions) : estimateDistance(route.origin, route.destination, distanceOptions),
     routeStations: reusedRoute ? cloneRouteStations(reusable.routeStations) : undefined,
     status: defaultTripStatus(date),
     distanceSource: "estimated",
@@ -1280,6 +1346,8 @@ function cleanPlace(value) {
 
 function normalizePlace(value) {
   const trimmed = String(value || "").trim().replace(/T\d+$/i, "");
+  const railStationAlias = resolveRailStationAlias(trimmed);
+  if (railStationAlias) return railStationAlias.name;
   if (places[trimmed]) return trimmed;
   const airportAlias = resolveAirportAlias(trimmed);
   if (airportAlias) return airportAlias.place;
@@ -1320,9 +1388,13 @@ function resolveAirportAlias(value) {
   return airportAliasMap.get(trimmed) || airportAliasMap.get(trimmed.toUpperCase()) || null;
 }
 
-function estimateDistance(origin, destination) {
-  const from = resolvePlace(origin);
-  const to = resolvePlace(destination);
+function distanceOptionsForMode(mode) {
+  return { preferRail: mode === "rail" };
+}
+
+function estimateDistance(origin, destination, options = {}) {
+  const from = resolvePlace(origin, options);
+  const to = resolvePlace(destination, options);
   if (!from || !to) return 0;
   return Math.round(haversineKm(from, to));
 }
@@ -1410,7 +1482,11 @@ function renderMap(visibleTrips) {
   routeByTripId = new Map();
   markerByTripId = new Map();
 
-  visibleTrips.forEach((trip) => {
+  const focusedTripVisible = focusedMapTripId && visibleTrips.some((trip) => trip.id === focusedMapTripId);
+  if (focusedMapTripId && !focusedTripVisible) focusedMapTripId = null;
+  const mapTrips = focusedMapTripId ? visibleTrips.filter((trip) => trip.id === focusedMapTripId) : visibleTrips;
+
+  mapTrips.forEach((trip) => {
     const points = getRoutePoints(trip);
     if (points.length < 2) return;
 
@@ -1489,6 +1565,7 @@ function renderMap(visibleTrips) {
 }
 
 function getRoutePoints(trip) {
+  const routePointOptions = distanceOptionsForMode(trip.mode);
   const railStationPoints = getRailRouteStationPoints(trip);
   if (railStationPoints.length >= 2) {
     return railStationPoints.map(({ point }) => point);
@@ -1498,11 +1575,11 @@ function getRoutePoints(trip) {
   const routeNames = knownRoutes[routeKey];
 
   if (routeNames) {
-    return routeNames.map((name) => places[name]).filter(Boolean);
+    return routeNames.map((name) => resolvePlace(name, routePointOptions)).filter(Boolean);
   }
 
-  const from = resolvePlace(trip.origin);
-  const to = resolvePlace(trip.destination);
+  const from = resolvePlace(trip.origin, routePointOptions);
+  const to = resolvePlace(trip.destination, routePointOptions);
   if (!from || !to) return [];
 
   // 航班/轮船用弧线表达；铁路/道路用弯曲线
@@ -1514,7 +1591,7 @@ function getRoutePoints(trip) {
 function getRailRouteStationPoints(trip) {
   if (trip?.mode !== "rail") return [];
   return cloneRouteStations(trip.routeStations)
-    .map((station) => ({ station, point: resolvePlace(station.station_name) }))
+    .map((station) => ({ station, point: resolvePlace(station.station_name, distanceOptionsForMode("rail")) }))
     .filter(({ point }) => Boolean(point));
 }
 
@@ -1577,6 +1654,7 @@ function mapContentPadding() {
 
 function selectTrip(tripId, options = {}) {
   selectedTripId = tripId;
+  if (focusedMapTripId) focusedMapTripId = tripId;
   renderTripStrip(getVisibleTrips());
   renderHero();
   renderMap(getVisibleTrips());
@@ -1584,6 +1662,20 @@ function selectTrip(tripId, options = {}) {
   if (options.focusMap) {
     fitMapToTrip(tripId);
   }
+}
+
+function focusMapOnTrip(tripId) {
+  focusedMapTripId = tripId;
+  renderHero();
+  renderMap(getVisibleTrips());
+  fitMapToTrip(tripId);
+}
+
+function showAllTripsOnMap() {
+  focusedMapTripId = null;
+  renderHero();
+  renderMap(getVisibleTrips());
+  fitMapToVisibleTrips();
 }
 
 function renderHero() {
@@ -1612,12 +1704,12 @@ function renderHero() {
       <p class="hero-route">${escapeHtml(shortPlace(trip.origin))}<span class="arrow">→</span>${escapeHtml(shortPlace(trip.destination))}</p>
       <div class="hero-meta"><span><strong>${escapeHtml(trip.title)}</strong></span><span>${escapeHtml(trip.date)}</span>
         <span>${timeInputValue(trip.departureTime) || "时间未填"}${timeInputValue(trip.arrivalTime) ? ` – ${escapeHtml(trip.arrivalTime)}` : ""}</span><span>${distanceLabel(trip)}</span></div>
-      <div class="map-caption"><span>${trip.routeStations?.length ? "按经停站连线" : "路线示意"} · ${trip.distanceSource === "manual" ? "里程由用户填写" : "里程含估算或未确认值"}</span><button data-action="locate" type="button">定位当前</button><button data-action="overview" type="button">查看全部</button></div>
+      <div class="map-caption"><span>${focusedMapTripId === trip.id ? "仅显示当前行程" : (trip.routeStations?.length ? "按经停站连线" : "路线示意")} · ${trip.distanceSource === "manual" ? "里程由用户填写" : "里程含估算或未确认值"}</span><button data-action="locate" type="button">定位当前</button><button data-action="overview" type="button">查看全部</button></div>
     </div>`;
   heroOverlay.querySelector('[data-action="edit"]').addEventListener("click", () => openTripEditor(trip, false));
   heroOverlay.querySelector('[data-action="delete"]').addEventListener("click", () => deleteTrip(trip.id));
-  heroOverlay.querySelector('[data-action="locate"]').addEventListener("click", () => fitMapToTrip(trip.id));
-  heroOverlay.querySelector('[data-action="overview"]').addEventListener("click", fitMapToVisibleTrips);
+  heroOverlay.querySelector('[data-action="locate"]').addEventListener("click", () => focusMapOnTrip(trip.id));
+  heroOverlay.querySelector('[data-action="overview"]').addEventListener("click", showAllTripsOnMap);
 }
 
 function renderQuickTripPreview(trip) { openTripEditor(trip, true); }
@@ -1779,7 +1871,7 @@ function syncEditorFields() {
     if (routeChanged) distanceField.value = "";
     const actualDistance = read("previewDistance");
     trip.distanceSource = actualDistance === "" ? "estimated" : distanceField.dataset.source === "unknown" && actualDistance === distanceField.dataset.original ? "unknown" : "manual";
-    trip.distanceKm = actualDistance === "" ? estimateDistance(trip.origin, trip.destination) : Number(actualDistance);
+    trip.distanceKm = actualDistance === "" ? estimateDistance(trip.origin, trip.destination, distanceOptionsForMode(trip.mode)) : Number(actualDistance);
     if (routeChanged || trip.title !== oldTitle) {
       delete trip.routeStations;
       delete trip.routeQueryDate;
@@ -1823,7 +1915,7 @@ function saveUnifiedTrip() {
   if (trip.origin === trip.destination) return editorError("previewDestination", "出发地和目的地不能相同。");
   trip.title = trip.mode === "flight" ? normalizeFlightNumber(trip.title) : trip.title;
   trip.routeUserProvided = true;
-  if (trip.distanceSource === "estimated") trip.distanceKm = estimateDistance(trip.origin, trip.destination);
+  if (trip.distanceSource === "estimated") trip.distanceKm = estimateDistance(trip.origin, trip.destination, distanceOptionsForMode(trip.mode));
   if (!routeStationsMatchTrip(trip)) delete trip.routeStations;
   const saved = JSON.parse(JSON.stringify(trip));
   if (editorIsNew) trips = [saved, ...trips];
@@ -1929,7 +2021,7 @@ function compactTripProfile(trip) {
     destination: trip.destination,
     departureTime: trip.departureTime && trip.departureTime !== "待确认" ? trip.departureTime : "",
     arrivalTime: trip.arrivalTime && trip.arrivalTime !== "待确认" ? trip.arrivalTime : "",
-    distanceKm: Number(trip.distanceKm) || estimateDistance(trip.origin, trip.destination) || 0,
+    distanceKm: Number(trip.distanceKm) || estimateDistance(trip.origin, trip.destination, distanceOptionsForMode(trip.mode)) || 0,
     routeStations: cloneRouteStations(trip.routeStations)
   };
 }
@@ -2142,7 +2234,7 @@ function renderRouteInput(trip, errorMsg = "") {
     trip.routeUserProvided = true;
     trip.status = trip.statusExplicit ? trip.status : defaultTripStatus(trip.date);
     // 距离兜底：按起讫站坐标计算
-    trip.distanceKm = estimateDistance(trip.origin, trip.destination);
+    trip.distanceKm = estimateDistance(trip.origin, trip.destination, distanceOptionsForMode(trip.mode));
     trip.distanceSource = "estimated";
     trip.routeSource = "manual";
     cacheEditor();
@@ -2207,7 +2299,7 @@ function renderStationSelector(trip, stations) {
     trip.routeStations = normalizeRailRouteStations(stations, Number(pickFrom.value), Number(pickTo.value));
     trip.routeSource = "timetable";
     trip.distanceSource = "estimated";
-    trip.distanceKm = estimateDistance(trip.origin, trip.destination);
+    trip.distanceKm = estimateDistance(trip.origin, trip.destination, distanceOptionsForMode(trip.mode));
     cacheEditor();
     previewEl.innerHTML =
       `<p class="station-route">${escapeHtml(f.station_name)} ${escapeHtml(f.start_time)} → ${escapeHtml(t.station_name)} ${escapeHtml(t.arrive_time)}</p>` +
@@ -2243,7 +2335,7 @@ function saveStationSelection(trip, stations) {
   if (to.arrive_time !== "----") trip.arrivalTime = to.arrive_time;
   trip.status = trip.statusExplicit ? trip.status : defaultTripStatus(trip.date);
   // 距离兜底：按起讫站坐标计算直线距离（无接口数据时使用）
-  trip.distanceKm = estimateDistance(trip.origin, trip.destination);
+  trip.distanceKm = estimateDistance(trip.origin, trip.destination, distanceOptionsForMode(trip.mode));
     trip.distanceSource = "estimated";
   trip.routeStations = normalizeRailRouteStations(stations, fromIndex, toIndex);
   trip.routeSource = "timetable";
@@ -2608,7 +2700,7 @@ function createRailTripFromCsvRecord(record, index) {
     date: travelDate,
     departureTime: "待确认",
     arrivalTime: "待确认",
-    distanceKm: estimateDistance(origin, destination),
+    distanceKm: estimateDistance(origin, destination, distanceOptionsForMode("rail")),
     distanceSource: "estimated",
     status: defaultTripStatus(travelDate),
     notes,
