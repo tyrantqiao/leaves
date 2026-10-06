@@ -23,6 +23,24 @@ function fixture() {
 async function main() {
   let passed = 0;
   async function test(name, fn) { await fn(); console.log(`PASS ${name}`); passed++; }
+  await test('local-only saves persist without requests and sync later without losing the base', async () => {
+    const disk = storage(); let localOnly = true, requests = 0, remote = [record('server')];
+    const make = () => new TripStore({ storage: disk, key: 'local', localOnly: () => localOnly, request: async options => {
+      requests++;
+      if (options.method === 'PUT') remote = JSON.parse(options.body);
+      return {ok:true,json:async()=>options.method==='GET' ? remote : {success:true}};
+    }});
+    let store = make(); await store.save([record('phone')]); assert.equal(requests,0);
+    store.destroy(); store=make(); await store.flush(); assert.equal(requests,0); assert.equal(store.trips[0].id,'phone');
+    localOnly=false; await store.flush(); assert.equal(remote.length,2);
+    localOnly=true; await store.save(store.trips.filter(t=>t.id!=='phone'));
+    localOnly=false; await store.flush(); assert.deepEqual(remote.map(t=>t.id),['server']);
+  });
+  await test('local-only quota failures never report a successful local save', async () => {
+    const statuses=[];
+    const store=new TripStore({storage:{getItem:()=>null,setItem:()=>{throw Error('quota');}},key:'local',localOnly:()=>true,request:()=>{throw Error('unexpected request');},onStatus:(...args)=>statuses.push(args)});
+    await store.save([record('phone')]); assert.equal(statuses.at(-1)[0],'error'); assert(!statuses.some(([state])=>state==='saved'));
+  });
   await test('failed saves survive a new store and refresh, then retry', async () => {
     const f = fixture(); let store = f.make();
     await store.flush(); f.failed = true; await store.save([record('new')]);

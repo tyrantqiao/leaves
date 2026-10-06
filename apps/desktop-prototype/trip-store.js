@@ -15,8 +15,8 @@
   }
 
   class TripStore {
-    constructor({ storage, key, request, onChange = () => {}, onStatus = () => {}, timeoutMs = 15000 }) {
-      Object.assign(this, { storage, key, request, onChange, onStatus, timeoutMs });
+    constructor({ storage, key, request, onChange = () => {}, onStatus = () => {}, timeoutMs = 15000, localOnly = () => false }) {
+      Object.assign(this, { storage, key, request, onChange, onStatus, timeoutMs, localOnly });
       this.controller = new AbortController();
       this.closed = false;
       this.running = null;
@@ -90,10 +90,15 @@
     }
 
     async drain() {
+      if (this.localOnly()) {
+        if (this.cache()) this.onStatus('saved', '已保存到本机');
+        return;
+      }
       this.onStatus('saving', this.state.dirty ? '正在保存…' : '正在同步…');
       let conflicts = 0;
       try {
         do {
+          if (this.closed || this.localOnly()) return;
           const remote = await this.fetch('GET');
           if (this.closed) return;
           if (!this.state.dirty) {

@@ -1,5 +1,11 @@
 # 依赖
 node_modules/
+apps/android/.gradle/
+apps/android/**/build/
+apps/android/local.properties
+*.jks
+*.keystore
+exports/android-toolchain/
 
 # 本地数据（个人行程，不入库）
 apps/desktop-prototype/data/

@@ -1,0 +1,33 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'app.leaves.mobile'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'app.leaves.mobile'
+        minSdk 26
+        targetSdk 35
+        versionCode 3
+        versionName '0.3.2'
+    }
+    signingConfigs {
+        release {
+            if (System.getenv('LEAVES_ANDROID_KEYSTORE')) {
+                storeFile file(System.getenv('LEAVES_ANDROID_KEYSTORE'))
+                storePassword System.getenv('LEAVES_ANDROID_STORE_PASSWORD')
+                keyAlias System.getenv('LEAVES_ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('LEAVES_ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release { signingConfig signingConfigs.release; debuggable false; minifyEnabled false }
+    }
+    sourceSets.main.assets.srcDirs = [layout.buildDirectory.dir('leaves-assets')]
+}
+tasks.register('bundleLeaves', Sync) {
+    from '../../desktop-prototype'
+    into layout.buildDirectory.dir('leaves-assets')
+    include '*.html', '*.js', '*.css', 'vendor/**'
+    exclude 'dev-server.js'
+}
+tasks.named('preBuild').configure { dependsOn 'bundleLeaves' }

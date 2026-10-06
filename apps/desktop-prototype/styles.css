@@ -431,7 +431,8 @@ button {
     #18222a;
 }
 
-.leaflet-map {
+.leaflet-map.leaflet-container {
+  background: #9bc5d5;
   position: absolute;
   inset: 0;
   min-height: 0;
@@ -460,6 +461,11 @@ button {
   filter: drop-shadow(0 2px 7px rgba(77, 155, 255, 0.65));
   stroke-linecap: round;
 }
+
+.route-flow { animation: route-flow 2s linear infinite; }
+.map-overview .hero-overlay { background: linear-gradient(to top, rgba(13, 20, 24, .95), rgba(13, 20, 24, .5) 24%, transparent 42%); }
+@keyframes route-flow { to { stroke-dashoffset: -54; } }
+@media (prefers-reduced-motion: reduce) { .route-flow { animation: none; } }
 
 .leaflet-overlay-pane .route-flight.selected {
   filter: drop-shadow(0 3px 10px rgba(77, 155, 255, 0.85));

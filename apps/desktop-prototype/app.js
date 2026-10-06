@@ -786,6 +786,10 @@ function setAuthMessage(message, type = "") {
 }
 
 async function checkExistingSession() {
+  if (window.LeavesLocalApp) {
+    window.LeavesLocalApp.start();
+    return;
+  }
   authGate.hidden = false;
   appShell.hidden = true;
   setAuthMessage("正在检查登录状态...");
@@ -845,6 +849,7 @@ function enterApp(user) {
     storage: localStorage,
     key: scopedStorageKey(storageKey),
     request: (options) => apiFetch("/api/data/trips", options),
+    localOnly: () => window.LeavesLocalApp ? !window.LeavesLocalApp.syncEnabled() : false,
     onChange: (records) => {
       if (currentUser?.id !== user.id) return;
       trips = records;
@@ -855,7 +860,10 @@ function enterApp(user) {
       document.querySelector("#saveStatus").textContent = message;
       document.querySelector("#saveStatus").dataset.state = state;
       document.querySelector("#retrySave").hidden = state !== "error";
-      if (state === "expired") handleAuthExpired();
+      if (state === "expired") {
+        if (window.LeavesLocalApp) window.LeavesLocalApp.expired();
+        else handleAuthExpired();
+      }
     }
   });
   updateDraftButton();
@@ -884,6 +892,10 @@ function enterApp(user) {
 }
 
 async function logout() {
+  if (window.LeavesLocalApp) {
+    window.LeavesLocalApp.unlink();
+    return;
+  }
   pauseTripEditor();
   tripStore?.destroy();
   document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
@@ -1047,12 +1059,23 @@ function setupMap() {
   mapFallback.hidden = true;
   map = L.map("leafletMap", {
     zoomControl: true,
-    attributionControl: true
+    attributionControl: true,
+    minZoom: 0,
+    worldCopyJump: true
   }).setView([31.5, 120.8], 6);
 
   // 本地矢量底图放在瓦片层之下：在线瓦片可用时会被覆盖，离线时成为底图
   const basePane = map.createPane("offlineBase");
   basePane.style.zIndex = 150;
+
+  loadScriptOnce("./world-land.js").then(() => {
+    L.geoJSON(window.LEAVES_WORLD_LAND, {
+      pane: "offlineBase", interactive: false,
+      style: { color: "#809e99", weight: 0.8, fillColor: "#d9e4d4", fillOpacity: 1 }
+    }).addTo(map);
+    map.attributionControl.addAttribution('Natural Earth');
+    baseGeoJsonLayer?.bringToFront();
+  }).catch(() => {});
 
   loadChinaBaseGeoJson();
 
@@ -1170,6 +1193,7 @@ function apiUrl(path) {
 }
 
 function apiFetch(path, options = {}) {
+  if (window.LeavesLocalApp) return window.LeavesLocalApp.request(path, options);
   return fetch(apiUrl(path), {
     credentials: "include",
     ...options
@@ -1476,6 +1500,7 @@ function renderTripStrip(visibleTrips) {
 
 function renderMap(visibleTrips) {
   if (!map) return;
+  document.querySelector('#heroCard').classList.toggle('map-overview', !focusedMapTripId);
 
   routeLayer.clearLayers();
   markerLayer.clearLayers();
@@ -1494,10 +1519,17 @@ function renderMap(visibleTrips) {
     const route = L.polyline(points, {
       color: modeColors[trip.mode] || "#536268",
       weight: trip.mode === "flight" ? (isActive ? 8 : 6) : (isActive ? 7 : 5),
-      opacity: isActive ? 0.95 : 0.24,
+      opacity: isActive ? 1 : (focusedMapTripId ? 0.3 : 0.85),
       dashArray: undefined,
       className: `map-route route-${trip.mode}${isActive ? " selected" : ""}`
     }).addTo(routeLayer);
+
+    if (!focusedMapTripId) {
+      L.polyline(points, {
+        color: "#ffffff", weight: 2, opacity: 0.95, dashArray: "5 22",
+        interactive: false, className: "route-flow"
+      }).addTo(routeLayer);
+    }
 
     route.bindTooltip(`${trip.title} ${trip.origin} -> ${trip.destination}`, {
       sticky: true
@@ -1516,7 +1548,7 @@ function renderMap(visibleTrips) {
         className: "trip-marker"
       }).addTo(markerLayer);
 
-      marker.bindTooltip(label, { permanent: isActive, direction: "top", offset: [0, -8] });
+      marker.bindTooltip(label, { permanent: isActive && Boolean(focusedMapTripId), direction: "top", offset: [0, -8] });
       marker.on("click", () => selectTrip(trip.id, { focusMap: true }));
       return marker;
     });
@@ -1538,7 +1570,7 @@ function renderMap(visibleTrips) {
       });
     }
 
-    if (trip.mode === "flight" && isActive) {
+    if (trip.mode === "flight" && isActive && focusedMapTripId) {
       const middlePoint = points[Math.floor(points.length / 2)];
       endpointMarkers.push(
         L.marker(middlePoint, {
@@ -1556,7 +1588,7 @@ function renderMap(visibleTrips) {
   });
 
   const selectedRoute = routeByTripId.get(selectedTripId);
-  if (selectedRoute) {
+  if (selectedRoute && focusedMapTripId) {
     selectedRoute.bringToFront();
     fitMapToTrip(selectedTripId);
   } else {
@@ -2095,7 +2127,7 @@ async function openStationSelector(tripId, options = {}) {
   listEl.innerHTML = `<p class="ticket-loading">正在查询 12306 车次信息（${escapeHtml(queryDate)}）…</p>`;
 
   const tryQuery = async (date) => {
-    const response = await fetch(apiUrl("/api/12306/train-route"), {
+    const response = await apiFetch("/api/12306/train-route", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -2490,6 +2522,10 @@ function deleteTrip(tripId) {
 }
 
 function downloadJson(value, filename) {
+  if (window.LeavesAndroid) {
+    window.LeavesAndroid.exportJson(JSON.stringify(value, null, 2), filename);
+    return;
+  }
   const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: "application/json" }));
   const link = document.createElement("a");
   link.href = url; link.download = filename; link.click();

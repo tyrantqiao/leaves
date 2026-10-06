@@ -1,0 +1,15 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const gradle = fs.readFileSync('apps/android/app/build.gradle', 'utf8');
+const versionCode = Number(gradle.match(/versionCode\s+(\d+)/)[1]);
+const versionName = gradle.match(/versionName\s+'([^']+)'/)[1];
+const tag = process.argv[2] || `android-v${versionName}`;
+if (tag !== `android-v${versionName}`) throw Error('Release tag must match Android version');
+const apk = fs.readFileSync('apps/android/app/build/outputs/apk/release/app-release.apk');
+const folder = path.resolve('exports/android-release');
+fs.mkdirSync(folder, {recursive:true});
+fs.writeFileSync(path.join(folder, 'Leaves-Android.apk'), apk);
+const metadata = {packageName:'app.leaves.mobile',versionCode,versionName,tag,apkUrl:`https://github.com/tyrantqiao/leaves/releases/download/${tag}/Leaves-Android.apk`,size:apk.length,sha256:crypto.createHash('sha256').update(apk).digest('hex')};
+fs.writeFileSync(path.join(folder,'leaves-android-update.json'),JSON.stringify(metadata,null,2)+'\n');
+console.log(`Prepared ${tag}: ${apk.length} bytes, SHA256 ${metadata.sha256}`);
