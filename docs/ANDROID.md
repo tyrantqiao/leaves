@@ -1,6 +1,6 @@
 # 安卓版 Leaves（本机优先）
 
-可安装正式构建 APK：`exports/android-release/Leaves-Android.apk`（0.3.2），支持安卓 8.0 及以上。使用原有签名证书，可覆盖安装 0.3.0/0.3.1，保留本地记录。
+可安装正式构建 APK：`exports/android-release/Leaves-Android.apk`（0.3.3），支持安卓 8.0 及以上。使用原有签名证书，可覆盖安装 0.3.0/0.3.1，保留本地记录。
 
 ## 应用更新
 
@@ -42,7 +42,7 @@ Android 8+ 首次安装更新需在系统设置允许 Leaves「安装未知应�
 gradle -p apps/android assembleDebug lintDebug
 ```
 
-产物：`apps/android/app/build/outputs/apk/debug/app-debug.apk`。正式发布需配置并保管自己的签名密钥。提交 GitHub 后，也可运行 `Android APK` 工作流下载产物，工作流不会自动发布应用。
+产物：`apps/android/app/build/outputs/apk/debug/app-debug.apk`。正式发布需配置并保管自己的签名密钥。提交 GitHub 后，也可运行 `Android APK` 工作流下载产物，默认只生成调试产物；正式发布需配置签名 Secrets 并推送版本标签或勾选 publish。
 
 正式包使用环境变量 `LEAVES_ANDROID_KEYSTORE`、`LEAVES_ANDROID_STORE_PASSWORD`、`LEAVES_ANDROID_KEY_ALIAS`、`LEAVES_ANDROID_KEY_PASSWORD`，执行 `gradle -p apps/android assembleRelease lintRelease`，然后运行 `node scripts/prepare-android-release.cjs` 生成 APK 和更新清单。签名文件及本机凭据保存在被忽略的 `exports/signing/`，应单独备份，不能提交或上传到 Release。
 

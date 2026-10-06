@@ -51,18 +51,11 @@ public final class AppUpdater {
         if(manual)toast("正在检查 GitHub 更新…");
         worker.execute(()->{
             try {
-                JSONObject release=json("https://api.github.com/repos/"+REPO+"/releases/latest");
-                if(release.optBoolean("draft") || release.optBoolean("prerelease")) throw new IOException("暂无正式版本");
-                String manifestUrl=null;
-                JSONArray assets=release.getJSONArray("assets");
-                for(int i=0;i<assets.length();i++) {
-                    JSONObject asset=assets.getJSONObject(i);
-                    if("leaves-android-update.json".equals(asset.optString("name")))manifestUrl=asset.getString("browser_download_url");
-                }
-                if(manifestUrl==null)throw new IOException("此 Release 尚未提供安卓更新包");
-                if(!manifestUrl.startsWith(ASSET_PREFIX))throw new IOException("更新清单来源无效");
-                JSONObject metadata=json(manifestUrl);
-                validateMetadata(metadata,release.getString("tag_name"));
+                // Public Release asset avoids GitHub's shared anonymous API rate limit.
+                JSONObject metadata=json("https://github.com/"+REPO+"/releases/latest/download/leaves-android-update.json");
+                String tag=metadata.getString("tag");
+                if(!tag.matches("android-v[0-9]+\\.[0-9]+\\.[0-9]+"))throw new IOException("更新版本标签无效");
+                validateMetadata(metadata,tag);
                 prefs.edit().putLong("checked",System.currentTimeMillis()).apply();
                 if(metadata.getLong("versionCode")<=version(installed())) {if(manual)toast("当前已是最新版本");return;}
                 if(prefs.getBoolean("auto",true))download(metadata);
