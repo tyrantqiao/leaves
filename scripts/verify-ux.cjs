@@ -156,6 +156,38 @@ async function main() {
       await page.click('.record-row'); assert.match(await page.locator('.trip-card.active').innerText(),/ARCHIVE-0299/);
       await page.click('#moreMenu summary'); await page.click('#restorePrevious'); await page.click('#confirmImport'); await saved();
     });
+    await check('date ordering, selection contrast and all-trip map survive filtering and resize', async () => {
+      const records = [
+        {id:'ui-old',mode:'rail',title:'G1111',date:'2025-01-03',origin:'北京',destination:'上海',status:'completed',distanceKm:1000},
+        {id:'ui-new',mode:'flight',title:'CA2222',date:'2026-09-04',origin:'北京首都国际机场',destination:'广州白云国际机场',status:'completed',distanceKm:1800},
+        {id:'ui-mid',mode:'rail',title:'G3333',date:'2026-05-02',origin:'上海虹桥',destination:'杭州东',status:'completed',distanceKm:150}
+      ];
+      await page.locator('#importJsonFile').setInputFiles({name:'map-ui.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(records))});
+      await page.locator('#importDialog[open]').waitFor(); await page.click('#confirmImport'); await saved();
+      assert.deepEqual(await page.locator('.trip-card').evaluateAll(cards=>cards.map(card=>card.dataset.tripId)), ['ui-new','ui-mid','ui-old']);
+      await page.click('[data-trip-id="ui-mid"]');
+      assert.equal(await page.locator('.trip-card.active').getAttribute('data-trip-id'),'ui-mid');
+      assert.equal(await page.locator('.trip-card.muted').count(),2);
+      await page.click('#allRecords'); await page.click('#clearRecordFilters');
+      assert.deepEqual(await page.locator('.record-row').evaluateAll(rows=>rows.map(row=>row.dataset.recordId)), ['ui-new','ui-mid','ui-old']);
+      assert.equal(await page.locator('.record-row.muted').count(),2);
+      await page.click('[data-record-id="ui-mid"]');
+      await page.click('[data-filter="rail"]'); await page.click('[data-action="locate"]');
+      assert.equal(await page.locator('.map-route').count(),1);
+      await page.click('[data-action="overview"]');
+      assert.equal(await page.locator('[data-filter="all"]').getAttribute('aria-pressed'),'true');
+      assert.equal(await page.locator('.map-route').count(),3);
+      assert.equal(await page.locator('.map-route.selected').count(),1);
+      const colors=await page.locator('.map-route:not(.selected)').evaluateAll(routes=>routes.map(route=>route.getAttribute('stroke')));
+      assert(colors.every(color=>color==='#8c969c'));
+      await page.setViewportSize({width:360,height:640});
+      await page.waitForTimeout(150);
+      assert.equal(await page.locator('.map-route').count(),3);
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),360);
+      await shot('all-trips-mobile');
+      await page.setViewportSize({width:1440,height:900});
+      await page.click('#moreMenu summary'); await page.click('#restorePrevious'); await page.click('#confirmImport'); await saved();
+    });
     await check('stale API writes are rejected and removed ticket routes stay absent', async () => {
       const original = await context.request.get(`${url}/api/data/trips`); const records = await original.json(); const etag=original.headers().etag; assert(etag);
       const results = await Promise.all([1,2].map(n=>context.request.put(`${url}/api/data/trips`,{headers:{'If-Match':etag},data:records.map((r,i)=>i? r:{...r,notes:`revision-${n}`})})));

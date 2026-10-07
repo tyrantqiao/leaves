@@ -26,6 +26,7 @@ public final class AppUpdater {
     private final AtomicBoolean busy = new AtomicBoolean();
     private volatile boolean closed;
     private boolean permissionPending;
+    private boolean startupChecked;
     private volatile HttpURLConnection active;
     private final File apk;
 
@@ -42,12 +43,14 @@ public final class AppUpdater {
         try {current=installed().versionName;} catch(Exception e) {current="未知";}
         CheckBox auto=new CheckBox(activity); auto.setText("自动检查并下载新版本"); auto.setChecked(prefs.getBoolean("auto",true));
         auto.setOnCheckedChangeListener((button,checked)->prefs.edit().putBoolean("auto",checked).apply());
-        new AlertDialog.Builder(activity).setTitle("应用更新 · "+current).setMessage("更新来自 GitHub Release。启用自动更新后，每天打开应用时检查并下载；安装需要安卓系统确认，不影响本机使用。")
+        new AlertDialog.Builder(activity).setTitle("应用更新 · "+current).setMessage("更新来自 GitHub Release。启用自动更新后，每次启动应用时检查并下载；安装需要安卓系统确认，不影响本机使用。")
             .setView(auto).setPositiveButton("检查更新",(d,w)->check(true)).setNeutralButton("安装已下载更新",(d,w)->install()).setNegativeButton("关闭",null).show();
     }
     public void check(boolean manual) {
-        if (closed || (!manual && (!prefs.getBoolean("auto",true) || System.currentTimeMillis()-prefs.getLong("checked",0)<24*60*60*1000L))) return;
+        if (closed || (!manual && (!prefs.getBoolean("auto",true) || startupChecked))) return;
         if (!busy.compareAndSet(false,true)) {if(manual)toast("正在检查或下载更新…");return;}
+        // onResume also runs after settings and installer; check once per app startup.
+        if (!manual) startupChecked = true;
         if(manual)toast("正在检查 GitHub 更新…");
         worker.execute(()->{
             try {
@@ -56,7 +59,6 @@ public final class AppUpdater {
                 String tag=metadata.getString("tag");
                 if(!tag.matches("android-v[0-9]+\\.[0-9]+\\.[0-9]+"))throw new IOException("更新版本标签无效");
                 validateMetadata(metadata,tag);
-                prefs.edit().putLong("checked",System.currentTimeMillis()).apply();
                 if(metadata.getLong("versionCode")<=version(installed())) {if(manual)toast("当前已是最新版本");return;}
                 if(prefs.getBoolean("auto",true))download(metadata);
                 else ui(()->new AlertDialog.Builder(activity).setTitle("发现新版本 "+metadata.optString("versionName")).setMessage("可下载并覆盖更新，本机记录会保留。")

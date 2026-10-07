@@ -1456,7 +1456,7 @@ function render() {
 }
 
 function getVisibleTrips() {
-  return trips.filter((trip) => activeFilter === "all" || trip.mode === activeFilter);
+  return trips.filter((trip) => activeFilter === "all" || trip.mode === activeFilter).sort(compareTripsByDateDesc);
 }
 
 function renderTripStrip(visibleTrips) {
@@ -1472,11 +1472,14 @@ function renderTripStrip(visibleTrips) {
 
   const recent = visibleTrips.slice(0, 20);
   const selected = visibleTrips.find((trip) => trip.id === selectedTripId);
-  if (selected && !recent.includes(selected)) recent.splice(19, 1, selected);
+  if (selected && !recent.includes(selected)) {
+    recent.splice(19, 1, selected);
+    recent.sort(compareTripsByDateDesc);
+  }
   recent.forEach((trip) => {
     const card = document.createElement("button");
     card.type = "button";
-    card.className = `trip-card ${trip.mode}${trip.id === selectedTripId ? " active" : ""}`;
+    card.className = `trip-card ${trip.mode}${trip.id === selectedTripId ? " active" : (selectedTripId ? " muted" : "")}`;
     card.dataset.tripId = trip.id;
     card.setAttribute("aria-pressed", String(trip.id === selectedTripId));
     card.innerHTML = `
@@ -1517,14 +1520,14 @@ function renderMap(visibleTrips) {
 
     const isActive = trip.id === selectedTripId;
     const route = L.polyline(points, {
-      color: modeColors[trip.mode] || "#536268",
+      color: isActive ? (modeColors[trip.mode] || "#536268") : "#8c969c",
       weight: trip.mode === "flight" ? (isActive ? 8 : 6) : (isActive ? 7 : 5),
-      opacity: isActive ? 1 : (focusedMapTripId ? 0.3 : 0.85),
+      opacity: isActive ? 1 : 0.35,
       dashArray: undefined,
       className: `map-route route-${trip.mode}${isActive ? " selected" : ""}`
     }).addTo(routeLayer);
 
-    if (!focusedMapTripId) {
+    if (!focusedMapTripId && isActive) {
       L.polyline(points, {
         color: "#ffffff", weight: 2, opacity: 0.95, dashArray: "5 22",
         interactive: false, className: "route-flow"
@@ -1543,8 +1546,8 @@ function renderMap(visibleTrips) {
         radius: isActive ? 8 : 6,
         color: "#ffffff",
         weight: 3,
-        fillColor: isActive ? "#b44335" : modeColors[trip.mode] || "#263237",
-        fillOpacity: 1,
+        fillColor: isActive ? (modeColors[trip.mode] || "#263237") : "#8c969c",
+        fillOpacity: isActive ? 1 : 0.4,
         className: "trip-marker"
       }).addTo(markerLayer);
 
@@ -1588,8 +1591,8 @@ function renderMap(visibleTrips) {
   });
 
   const selectedRoute = routeByTripId.get(selectedTripId);
+  if (selectedRoute) selectedRoute.bringToFront();
   if (selectedRoute && focusedMapTripId) {
-    selectedRoute.bringToFront();
     fitMapToTrip(selectedTripId);
   } else {
     fitMapToVisibleTrips();
@@ -1705,9 +1708,7 @@ function focusMapOnTrip(tripId) {
 
 function showAllTripsOnMap() {
   focusedMapTripId = null;
-  renderHero();
-  renderMap(getVisibleTrips());
-  fitMapToVisibleTrips();
+  setFilter("all");
 }
 
 function renderHero() {
@@ -1736,7 +1737,7 @@ function renderHero() {
       <p class="hero-route">${escapeHtml(shortPlace(trip.origin))}<span class="arrow">→</span>${escapeHtml(shortPlace(trip.destination))}</p>
       <div class="hero-meta"><span><strong>${escapeHtml(trip.title)}</strong></span><span>${escapeHtml(trip.date)}</span>
         <span>${timeInputValue(trip.departureTime) || "时间未填"}${timeInputValue(trip.arrivalTime) ? ` – ${escapeHtml(trip.arrivalTime)}` : ""}</span><span>${distanceLabel(trip)}</span></div>
-      <div class="map-caption"><span>${focusedMapTripId === trip.id ? "仅显示当前行程" : (trip.routeStations?.length ? "按经停站连线" : "路线示意")} · ${trip.distanceSource === "manual" ? "里程由用户填写" : "里程含估算或未确认值"}</span><button data-action="locate" type="button">定位当前</button><button data-action="overview" type="button">查看全部</button></div>
+      <div class="map-caption"><span>${focusedMapTripId === trip.id ? "仅显示当前行程" : `显示 ${getVisibleTrips().length} 条行程`} · ${trip.distanceSource === "manual" ? "里程由用户填写" : "里程含估算或未确认值"}</span><button data-action="locate" type="button">定位当前</button><button data-action="overview" type="button">全部行程</button></div>
     </div>`;
   heroOverlay.querySelector('[data-action="edit"]').addEventListener("click", () => openTripEditor(trip, false));
   heroOverlay.querySelector('[data-action="delete"]').addEventListener("click", () => deleteTrip(trip.id));
@@ -2788,9 +2789,10 @@ function getRailImportKey(trip) {
 }
 
 function compareTripsByDateDesc(a, b) {
-  const dateCompare = String(b.date || "").localeCompare(String(a.date || ""));
+  const dateCompare = (parseTripDate(b.date)?.getTime() || 0) - (parseTripDate(a.date)?.getTime() || 0);
   if (dateCompare !== 0) return dateCompare;
-  return String(b.title || "").localeCompare(String(a.title || ""));
+  return String(b.departureTime || "").localeCompare(String(a.departureTime || "")) ||
+    String(b.title || "").localeCompare(String(a.title || ""));
 }
 
 function getTripStats() {
@@ -3196,7 +3198,7 @@ function renderRecordRow(trip) {
   const tripMode = trip.mode || "road";
   const note = String(trip.notes || "").trim();
   const isSelected = trip.id === selectedTripId;
-  return `<button class="record-row ${escapeHtml(tripMode)}${isSelected ? " active" : ""}" data-record-id="${escapeHtml(trip.id)}" type="button" aria-label="查看 ${escapeHtml(trip.title)} ${escapeHtml(trip.origin)} 到 ${escapeHtml(trip.destination)}" aria-current="${isSelected ? "true" : "false"}">
+  return `<button class="record-row ${escapeHtml(tripMode)}${isSelected ? " active" : (selectedTripId ? " muted" : "")}" data-record-id="${escapeHtml(trip.id)}" type="button" aria-label="查看 ${escapeHtml(trip.title)} ${escapeHtml(trip.origin)} 到 ${escapeHtml(trip.destination)}" aria-current="${isSelected ? "true" : "false"}">
       <span class="record-date"><strong>${escapeHtml(formatRecordDay(trip.date))}</strong><small>${escapeHtml(modeLabel(tripMode))}</small></span>
       <span class="record-main">
         <span class="record-title"><strong>${escapeHtml(trip.origin)} → ${escapeHtml(trip.destination)}</strong><span>${escapeHtml(trip.title)}</span></span>
@@ -3222,7 +3224,8 @@ function setupWorkspaceInteractions() {
   new ResizeObserver(() => {
     if (map && currentView === "home") {
       map.invalidateSize({ animate: false });
-      if (selectedTripId) fitMapToTrip(selectedTripId);
+      if (focusedMapTripId) fitMapToTrip(focusedMapTripId);
+      else fitMapToVisibleTrips();
     }
   }).observe(document.querySelector("#heroCard"));
   document.querySelector("#retrySave").addEventListener("click", persistTripsToServer);

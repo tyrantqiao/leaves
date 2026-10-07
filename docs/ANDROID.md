@@ -1,10 +1,10 @@
 # 安卓版 Leaves（本机优先）
 
-可安装正式构建 APK：`exports/android-release/Leaves-Android.apk`（0.3.3），支持安卓 8.0 及以上。使用原有签名证书，可覆盖安装 0.3.0/0.3.1，保留本地记录。
+可安装正式构建 APK：`exports/android-release/Leaves-Android.apk`（0.3.4），支持安卓 8.0 及以上。使用原有签名证书，可覆盖安装 0.3.0/0.3.1，保留本地记录。
 
 ## 应用更新
 
-「更多 → 应用更新」显示当前版本，可手动检查、安装已下载更新或开关自动更新。默认启用自动更新，每天在打开应用时检查 GitHub 最新正式 Release；发现更高 versionCode 后下载并验证 APK，然后提示安装。关闭自动更新后仅手动检查。更新不要求连接 Leaves 数据服务器。
+「更多 → 应用更新」显示当前版本，可手动检查、安装已下载更新或开关自动更新。默认启用自动更新，每次启动应用时检查 GitHub 最新正式 Release，同一次运行从后台返回或安装界面返回不会重复检查；检查在后台执行，离线或检查失败不打断首页；发现更高 versionCode 后下载并验证 APK，然后提示安装。关闭自动更新后仅手动检查。更新不要求连接 Leaves 数据服务器。
 
 更新源为 `https://github.com/tyrantqiao/leaves/releases`。每个安卓 Release 提供 `Leaves-Android.apk` 和 `leaves-android-update.json`（版本、大小、SHA256、下载地址）。安装前校验包名、递增版本、文件大小/哈希和与当前安装一致的签名。断网、检查失败或下载中断均不会影响本机使用；可再次手动检查。
 
@@ -48,6 +48,6 @@ gradle -p apps/android assembleDebug lintDebug
 
 `.github/workflows/android.yml` 包含签名 Release 发布任务。配置仓库加密 Secrets `LEAVES_ANDROID_KEYSTORE_BASE64`（签名文件 Base64）以及上述密码和别名三个 Secrets 后，推送匹配版本的 `android-v*` 标签或手动选择 publish 可发布正式包。必须使用相同证书、递增 versionCode；已发布版本不会被该任务覆盖。
 
-14 项存储检查、18 项浏览器检查，以及 `scripts/verify-android.cjs` 的首次无服务器启动、离线编辑/重启、首次双向合并、两端删除、冲突副本、登录过期、账号隔离和旧版缓存迁移检查通过。安卓专项检查模拟原生网络接口；当前没有连接安卓设备，真机 WebView、原生网络和系统文件选择器仍需安装后确认。
+14 项存储检查、19 项浏览器检查，以及 `scripts/verify-android.cjs` 的首次无服务器启动、离线编辑/重启、首次双向合并、两端删除、冲突副本、登录过期、账号隔离和旧版缓存迁移检查通过。安卓专项检查模拟原生网络接口；当前没有连接安卓设备，真机 WebView、原生网络和系统文件选择器仍需安装后确认。
 
 世界陆地底图：Natural Earth 1:110m（公共领域），https://github.com/nvkelso/natural-earth-vector/blob/master/geojson/ne_110m_land.geojson 。当前是二维世界地图，全局行程使用流动虚线，系统减少动画偏好会停用动画。
