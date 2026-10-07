@@ -228,9 +228,9 @@ button {
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  background: var(--accent);
-  color: #ffffff;
-  font-weight: 800;
+  background: #173e35;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
 .quick-add {
