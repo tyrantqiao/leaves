@@ -2495,3 +2495,16 @@ button:focus-visible, summary:focus-visible, input:focus-visible, select:focus-v
 @media (prefers-reduced-motion: reduce) {
   .trip-card, .record-row { transition: none; }
 }
+
+/* Reading and navigation improvements. */
+.trip-card.muted, .record-row.muted { filter: none; opacity: 1; background: var(--panel); }
+.trip-card.muted:hover, .record-row.muted:hover { background: var(--panel-strong); opacity: 1; }
+.hero-meta, .map-caption { color: #e7eff2; }
+.rank-link { width: 100%; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.rank-link:hover { background: var(--panel-strong); }
+.edit-field small { color: var(--muted); line-height: 1.5; }
+@media (max-width: 720px) {
+  .hero-description { background: rgba(13,20,24,.8); border-radius: 8px; padding: 8px; }
+  .hero-meta { gap: 4px 8px; }
+  .app-notice { margin: 0 6px; padding: 4px 8px; }
+}

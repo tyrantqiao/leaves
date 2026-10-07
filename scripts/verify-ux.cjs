@@ -93,6 +93,50 @@ async function main() {
       }
     });
     await page.setViewportSize({width:1440,height:900});
+    await check('cross-day dates validate, clear errors and survive reload', async () => {
+      await add('K8800', 'rail', '2026-09-01'); await route('北京', '上海');
+      await page.click('#editorExtra summary');
+      await page.fill('#previewDeparture','23:00'); await page.fill('#previewArrival','07:00');
+      await page.fill('#previewArrivalDate','2026-08-31'); await page.click('[data-action="save"]');
+      assert(await page.locator('#editorError').isVisible());
+      await page.fill('#previewArrivalDate','2026-09-02'); assert(await page.locator('#editorError').isHidden());
+      await save(); await page.reload(); await saved();
+      await page.locator(".trip-card").filter({hasText:"K8800"}).click();
+      assert.match(await page.locator('#heroOverlay').innerText(), /2026-09-02 07:00/);
+      await page.click('[data-action="edit"]'); await page.click('#editorExtra summary');
+      assert.equal(await page.inputValue('#previewArrivalDate'),'2026-09-02'); await page.click('[data-action="discard"]');
+    });
+    await check('dashboard links, fresh record filters and featured achievement labels', async () => {
+      await page.click('#allRecords'); await page.fill('#recordSearch','not-found'); await page.fill('#recordMonth','2000-01');
+      await page.click('#recordsDialog [data-close-dialog]'); await page.click('#allRecords');
+      assert.equal(await page.inputValue('#recordSearch'),''); assert.equal(await page.inputValue('#recordMonth'),'');
+      await page.click('#recordsDialog [data-close-dialog]'); await page.click('#dashboardTab');
+      assert.equal(await page.locator('#recentHighlightsTitle').innerText(),'近期行程');
+      await page.locator('#topRoutesList button').first().click(); assert(await page.locator('#recordsDialog').isVisible());
+      assert.match(await page.locator('#recordCount').innerText(), /路线：/);
+      await page.click('#clearRecordFilters'); assert(!(await page.locator('#recordCount').innerText()).includes('路线：'));
+      await page.click('#recordsDialog [data-close-dialog]'); await page.locator('#recentHighlights button').first().click();
+      assert(await page.locator('#homeView').isVisible());
+      await page.click('#achievementsTab'); await page.click('#toggleAchievements');
+      assert.equal(await page.locator('#toggleAchievements').innerText(),'查看精选成就');
+      await page.click('#toggleAchievements'); await page.click('#homeTab');
+    });
+    await check('delete undo restores only the deleted record on mobile', async () => {
+      const before = await page.locator('.trip-card').count();
+      await page.setViewportSize({width:360,height:640});
+      await page.click('.trip-more summary'); await page.click('[data-action="delete"]'); await saved();
+      assert.equal(await page.locator('.trip-card').count(),before-1);
+      const rect = await page.locator('.bottom-panel').boundingBox(); assert(rect.y+rect.height<=641);
+      await page.click('#undoDelete'); await saved(); assert.equal(await page.locator('.trip-card').count(),before);
+      await shot('improved-home-mobile'); await page.setViewportSize({width:1440,height:900});
+    });
+    await check('ship and road manual forms save and filter correctly', async () => {
+      for (const mode of ['ship','road']) {
+        await add(mode === 'ship' ? '轮渡测试' : '自驾测试', mode); await route('上海', '宁波'); await save();
+        await page.click('[data-filter="'+mode+'"]'); assert.equal(await page.locator('.trip-card').count(),1);
+      }
+      await page.click('[data-filter="all"]');
+    });
     await check('rail query failure returns to the same editable draft', async () => {
       await page.route('**/api/12306/train-route',r=>r.fulfill({json:{success:false,error:'测试查询不可用'}}));
       await add('G2468'); await route('合肥南','上海虹桥'); await page.click('[data-action="rail-complete"]');
@@ -197,10 +241,13 @@ async function main() {
       await page.reload(); await page.locator('#appShell').waitFor(); await saved();
     });
     await check('account switching does not expose another account draft or trips', async () => {
+      await page.click('#allRecords'); await page.fill('#recordSearch','previous-account'); await page.fill('#recordMonth','2000-01');
+      await page.click('#recordsDialog [data-close-dialog]');
       await add('G4000'); await route('北京','上海'); await page.click('#pauseEditor');
       await page.click('#moreMenu summary'); await page.click('#logoutButton'); await page.locator('#authGate').waitFor();
       await page.click('#registerTab'); await page.fill('#authUsername',username+'b'); await page.fill('#authPassword',password); await page.fill('#authPasswordConfirm',password); await page.click('#authSubmit');
       await page.locator('#appShell').waitFor(); await saved(); assert.equal(await page.locator('.trip-card').count(),0); assert(await page.locator('#resumeDraft').isHidden());
+      assert.equal(await page.inputValue('#recordSearch'),''); assert.equal(await page.inputValue('#recordMonth'),''); assert(await page.locator('#undoDelete').isHidden());
       await page.click('#moreMenu summary'); await page.click('#logoutButton'); await page.locator('#authGate').waitFor();
       await page.fill('#authUsername',username); await page.fill('#authPassword',password); await page.click('#authSubmit'); await page.locator('#appShell').waitFor(); await saved();
       await page.click('#resumeDraft'); assert.equal(await page.inputValue('#previewTitle'),'G4000'); await page.click('[data-action="discard"]');

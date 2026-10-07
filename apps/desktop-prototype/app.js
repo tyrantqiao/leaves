@@ -592,6 +592,8 @@ let editorInitial = "";
 let queryGeneration = 0;
 let importProposal = null;
 let showAllAchievements = false;
+let deletedTripUndo = null;
+let recordRouteFilter = null;
 const editorDialog = document.querySelector("#tripEditor");
 const editorContent = document.querySelector("#editorContent");
 const draftStorageKey = "leaves.prototype.editor";
@@ -842,6 +844,7 @@ async function submitAuthForm() {
 
 function enterApp(user) {
   currentUser = user;
+  deletedTripUndo = null; showAllAchievements = false; clearRecordFilters(); notifyUser("");
   tripStore?.destroy();
   editorTrip = null;
   savedDraft = readLocalJson(scopedStorageKey(draftStorageKey), null);
@@ -1736,7 +1739,7 @@ function renderHero() {
     <div class="hero-description">
       <p class="hero-route">${escapeHtml(shortPlace(trip.origin))}<span class="arrow">→</span>${escapeHtml(shortPlace(trip.destination))}</p>
       <div class="hero-meta"><span><strong>${escapeHtml(trip.title)}</strong></span><span>${escapeHtml(trip.date)}</span>
-        <span>${timeInputValue(trip.departureTime) || "时间未填"}${timeInputValue(trip.arrivalTime) ? ` – ${escapeHtml(trip.arrivalTime)}` : ""}</span><span>${distanceLabel(trip)}</span></div>
+        <span>${escapeHtml(tripTimeLabel(trip))}</span><span>${distanceLabel(trip)}</span></div>
       <div class="map-caption"><span>${focusedMapTripId === trip.id ? "仅显示当前行程" : `显示 ${getVisibleTrips().length} 条行程`} · ${trip.distanceSource === "manual" ? "里程由用户填写" : "里程含估算或未确认值"}</span><button data-action="locate" type="button">定位当前</button><button data-action="overview" type="button">全部行程</button></div>
     </div>`;
   heroOverlay.querySelector('[data-action="edit"]').addEventListener("click", () => openTripEditor(trip, false));
@@ -1754,6 +1757,21 @@ function distanceLabel(trip) {
   const distance = Number(trip.distanceKm);
   if (!Number.isFinite(distance) || distance < 0 || (!distance && trip.distanceSource !== "manual")) return "里程待补充";
   return `${trip.distanceSource === "manual" ? "" : "约 "}${formatNumber(distance)} km`;
+}
+function clearRecordFilters() {
+  recordRouteFilter = null;
+  document.querySelector("#recordSearch").value = "";
+  document.querySelector("#recordMonth").value = "";
+  document.querySelector("#recordMode").value = "all";
+}
+function openRecord(id) {
+  document.querySelector("#recordsDialog").close(); selectedTripId = id;
+  switchView("home"); setFilter("all"); heroOverlay.querySelector('[data-action="edit"]')?.focus();
+}
+function tripTimeLabel(trip) {
+  const from = timeInputValue(trip.departureTime), to = timeInputValue(trip.arrivalTime);
+  const day = trip.arrivalDate && trip.arrivalDate !== trip.date ? trip.arrivalDate + " " : "";
+  return (from || "时间未填") + (to ? " – " + day + to : day ? " · 到达 " + trip.arrivalDate : "");
 }
 function notifyUser(message) {
   const notice = document.querySelector("#appNotice");
@@ -1845,6 +1863,7 @@ function renderTripEditor() {
       ${editField("previewStatus", "行程状态", statusSelectOptions(trip.status, "previewStatus"))}
       <details id="editorExtra"><summary>更多信息 · 时间、里程与备注（选填）</summary>
         ${editField("previewDeparture", "出发时间", `<input id="previewDeparture" type="time" value="${escapeHtml(timeInputValue(trip.departureTime))}">`)}
+        ${editField("previewArrivalDate", "到达日期", `<input id="previewArrivalDate" type="date" value="${escapeHtml(trip.arrivalDate || "")}" min="${escapeHtml(trip.date)}"><small>跨日请填写；留空表示日期未确认。</small>`)}
         ${editField("previewArrival", "到达时间", `<input id="previewArrival" type="time" value="${escapeHtml(timeInputValue(trip.arrivalTime))}">`)}
         ${!flight ? editField("previewOperator", "运营方", `<input id="previewOperator" value="${escapeHtml(trip.operator || "")}">`) : ""}
         ${editField("previewDistance", "里程 km", `<input id="previewDistance" type="number" min="0" step="0.1" placeholder="留空则估算" data-source="${escapeHtml(trip.distanceSource || "unknown")}" data-original="${Number(trip.distanceKm) || 0}" value="${trip.distanceSource === "manual" || (trip.distanceSource !== "estimated" && Number(trip.distanceKm) > 0) ? Number(trip.distanceKm) || 0 : ""}">`)}
@@ -1863,6 +1882,9 @@ function renderTripEditor() {
   if (trip.mode === "rail") wireRailStationPicker(editorContent);
   const editForm = editorContent.querySelector("form");
   editForm.addEventListener("input", (event) => {
+    if (event.target.getAttribute("aria-describedby") === "editorError") {
+      const error = editorContent.querySelector("#editorError"); error.hidden = true; error.textContent = ""; event.target.removeAttribute("aria-describedby");
+    }
     event.target.removeAttribute("aria-invalid");
     if (event.target.id === "previewStatus") trip.statusExplicit = true;
     if (event.target.id === "previewTitle" && trip.mode === "flight") {
@@ -1870,6 +1892,7 @@ function renderTripEditor() {
       if (shouldAutofillFlightAirline(operator.value, getFlightAirlineFallback(event.target.value))) operator.value = getFlightAirlineFallback(event.target.value);
     }
     if (event.target.id === "previewDate" && !trip.statusExplicit) editorContent.querySelector("#previewStatus").value = defaultTripStatus(event.target.value);
+    if (event.target.id === "previewDate") editorContent.querySelector("#previewArrivalDate").min = event.target.value;
     syncEditorFields();
   });
   editorContent.querySelector("#previewMode").addEventListener("change", () => {
@@ -1898,7 +1921,7 @@ function syncEditorFields() {
     const read = (id) => editorContent.querySelector(`#${id}`)?.value.trim() || "";
     const oldRoute = `${trip.mode}|${trip.origin}|${trip.destination}`;
     const oldTitle = trip.title;
-    Object.assign(trip, { mode: read("previewMode"), title: read("previewTitle"), date: read("previewDate"), origin: read("previewOrigin"), destination: read("previewDestination"), operator: read("previewOperator"), status: read("previewStatus"), departureTime: read("previewDeparture"), arrivalTime: read("previewArrival"), notes: read("previewNotes") });
+    Object.assign(trip, { mode: read("previewMode"), title: read("previewTitle"), date: read("previewDate"), origin: read("previewOrigin"), destination: read("previewDestination"), operator: read("previewOperator"), status: read("previewStatus"), departureTime: read("previewDeparture"), arrivalTime: read("previewArrival"), arrivalDate: read("previewArrivalDate"), notes: read("previewNotes") });
     const routeChanged = `${trip.mode}|${trip.origin}|${trip.destination}` !== oldRoute;
     const distanceField = editorContent.querySelector("#previewDistance");
     if (routeChanged) distanceField.value = "";
@@ -1943,6 +1966,8 @@ function saveUnifiedTrip() {
   if (trip.mode === "flight" && !isValidFlightNumber(trip.title)) return editorError("previewTitle", "请填写正确的航班号，如 CA1234。");
   if (trip.mode === "flight" && !trip.operator) return editorError("previewOperator", "请填写航空公司。");
   if (!editorContent.querySelector("#previewDistance").checkValidity()) return editorError("previewDistance", "里程应为大于或等于 0 的数字。");
+  if (trip.arrivalDate && (!parseTripDate(trip.arrivalDate) || trip.arrivalDate < trip.date)) return editorError("previewArrivalDate", "到达日期不能早于出发日期。");
+  if (trip.mode !== "flight" && trip.arrivalDate === trip.date && trip.departureTime && trip.arrivalTime && trip.arrivalTime < trip.departureTime) return editorError("previewArrivalDate", "到达时间早于出发时间，请确认跨日到达日期。");
   const normalize = trip.mode === "flight" ? normalizeFlightPlace : normalizePlace;
   trip.origin = normalize(trip.origin); trip.destination = normalize(trip.destination);
   if (trip.origin === trip.destination) return editorError("previewDestination", "出发地和目的地不能相同。");
@@ -2514,12 +2539,22 @@ function deleteTrip(tripId) {
   if (!window.confirm(`确认删除行程「${trip.title} ${trip.origin} -> ${trip.destination}」？`)) return;
 
   if (!backupTrips()) return;
+  deletedTripUndo = { trip: JSON.parse(JSON.stringify(trip)), userId: currentUser.id };
   trips = trips.filter((item) => item.id !== tripId);
   if (selectedTripId === tripId) {
     selectedTripId = getVisibleTrips()[0]?.id || trips[0]?.id;
   }
-  persistTrips();
-  render();
+  persistTrips(); render(); notifyUser("已删除行程。");
+  const undo = document.createElement("button");
+  undo.type = "button"; undo.className = "ghost-button small"; undo.id = "undoDelete"; undo.textContent = "撤销删除";
+  undo.addEventListener("click", () => {
+    const pending = deletedTripUndo;
+    if (!pending || pending.userId !== currentUser?.id) return;
+    if (trips.some(item => item.id === pending.trip.id)) { notifyUser("这条行程已存在。"); return; }
+    trips = [pending.trip, ...trips]; selectedTripId = pending.trip.id; deletedTripUndo = null;
+    persistTrips(); setFilter("all"); notifyUser("已恢复删除的行程。");
+  });
+  document.querySelector("#appNotice").append(" ", undo);
 }
 
 function downloadJson(value, filename) {
@@ -2561,6 +2596,7 @@ function validImportedTrip(trip) {
     ["title", "origin", "destination", "date"].every((key) => typeof trip[key] === "string") &&
     /^\d{4}-\d{2}-\d{2}$/.test(trip.date) && Boolean(parseTripDate(trip.date)) &&
     ["operator", "notes", "departureTime", "arrivalTime", "status", "distanceSource"].every((key) => trip[key] === undefined || typeof trip[key] === "string") &&
+    (trip.arrivalDate === undefined || trip.arrivalDate === "" || (typeof trip.arrivalDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(trip.arrivalDate) && Boolean(parseTripDate(trip.arrivalDate)) && trip.arrivalDate >= trip.date)) &&
     (trip.distanceKm == null || (Number.isFinite(Number(trip.distanceKm)) && Number(trip.distanceKm) >= 0)) &&
     (trip.routeStations === undefined || (Array.isArray(trip.routeStations) && trip.routeStations.every((station) => station && typeof (station.station_name || station.stationName || station.name) === "string")));
 }
@@ -3026,37 +3062,41 @@ function renderTopRoutes(stats) {
 
   topRoutesList.innerHTML = stats.topRoutes
     .map((route, index) => `
-      <article class="rank-item">
+      <button type="button" class="rank-item rank-link" data-route-origin="${escapeHtml(route.origin)}" data-route-destination="${escapeHtml(route.destination)}">
         <span class="rank-no">${index + 1}</span>
         <div>
           <strong>${escapeHtml(route.origin)} → ${escapeHtml(route.destination)}</strong>
           <small>${escapeHtml(route.modes.map(modeLabel).join(" / "))}</small>
         </div>
         <span>${route.count} 次 · ${formatNumber(route.km)} km</span>
-      </article>
+      </button>
     `)
     .join("");
+  topRoutesList.querySelectorAll("[data-route-origin]").forEach(button => button.addEventListener("click", () => {
+    clearRecordFilters(); recordRouteFilter = { origin: button.dataset.routeOrigin, destination: button.dataset.routeDestination };
+    renderRecords(); document.querySelector("#recordsDialog").showModal();
+  }));
 }
-
 function renderRecentHighlights(stats) {
   recentCountLabel.textContent = `${stats.recentTrips.length} 条`;
   if (!stats.recentTrips.length) {
-    recentHighlights.innerHTML = `<p class="empty-copy">暂无动态</p>`;
+    recentHighlights.innerHTML = `<p class="empty-copy">暂无行程</p>`;
     return;
   }
 
   recentHighlights.innerHTML = stats.recentTrips
     .map(({ trip, date }) => `
-      <article class="rank-item">
+      <button type="button" class="rank-item rank-link" data-highlight-id="${escapeHtml(trip.id)}">
         <span class="rank-no ${trip.mode}">${modeLabel(trip.mode).slice(0, 1)}</span>
         <div>
           <strong>${escapeHtml(trip.origin)} → ${escapeHtml(trip.destination)}</strong>
           <small>${escapeHtml(trip.title)} · ${escapeHtml(statusLabel(trip.status))}</small>
         </div>
         <span>${escapeHtml(date ? formatDateLabel(date) : trip.date)} · ${formatNumber(trip.distanceKm || 0)} km</span>
-      </article>
+      </button>
     `)
     .join("");
+  recentHighlights.querySelectorAll("[data-highlight-id]").forEach(button => button.addEventListener("click", () => openRecord(button.dataset.highlightId)));
 }
 
 function renderAchievements(stats = getTripStats()) {
@@ -3078,7 +3118,7 @@ function renderAchievements(stats = getTripStats()) {
   `;
 
   const featured = [...unlocked.slice(-2), ...achievements.filter((item) => !item.unlocked).sort((a, b) => b.progress - a.progress).slice(0, 2)];
-  document.querySelector("#toggleAchievements").textContent = showAllAchievements ? "只看已解锁与近期目标" : "查看全部成就";
+  document.querySelector("#toggleAchievements").textContent = showAllAchievements ? "查看精选成就" : "查看全部成就";
   document.querySelector("#toggleAchievements").setAttribute("aria-expanded", String(showAllAchievements));
   achievementGrid.innerHTML = (showAllAchievements ? achievements : featured)
     .map((item) => {
@@ -3153,9 +3193,9 @@ function renderRecords() {
   const query = document.querySelector("#recordSearch").value.trim().toLowerCase();
   const month = document.querySelector("#recordMonth").value;
   const mode = document.querySelector("#recordMode").value;
-  const records = trips.filter((trip) => (!month || String(trip.date).startsWith(month)) && (mode === "all" || trip.mode === mode) && (!query || [trip.title, trip.origin, trip.destination, trip.notes].join(" ").toLowerCase().includes(query))).sort(compareTripsByDateDesc);
+  const records = trips.filter((trip) => (!recordRouteFilter || (trip.origin === recordRouteFilter.origin && trip.destination === recordRouteFilter.destination)) && (!month || String(trip.date).startsWith(month)) && (mode === "all" || trip.mode === mode) && (!query || [trip.title, trip.origin, trip.destination, trip.notes].join(" ").toLowerCase().includes(query))).sort(compareTripsByDateDesc);
   const countText = records.length === trips.length ? `共 ${trips.length} 条行程` : `找到 ${records.length} 条 · 共 ${trips.length} 条`;
-  document.querySelector("#recordCount").textContent = countText;
+  document.querySelector("#recordCount").textContent = countText + (recordRouteFilter ? ` · 路线：${recordRouteFilter.origin} → ${recordRouteFilter.destination}` : "");
   const list = document.querySelector("#recordList");
   list.innerHTML = records.length ? renderRecordGroups(records) : '<p class="empty-records">没有匹配的记录，试试清除筛选。</p>';
   list.querySelectorAll("[data-record-id]").forEach((button) => button.addEventListener("click", () => {
@@ -3236,12 +3276,13 @@ function setupWorkspaceInteractions() {
   editorContent.addEventListener("input", () => { if (!editorContent.querySelector("#tripEditForm")) syncEditorFields(); });
   document.querySelector("#openQuickAdd").addEventListener("click", () => { switchView("home"); input.focus(); });
   document.querySelector("#allRecords").addEventListener("click", () => {
+    clearRecordFilters();
     document.querySelector("#recordMode").value = activeFilter;
     renderRecords(); document.querySelector("#recordsDialog").showModal(); document.querySelector("#recordSearch").focus();
   });
   document.querySelectorAll("#recordSearch, #recordMonth, #recordMode").forEach((field) => field.addEventListener("input", renderRecords));
   document.querySelector("#clearRecordFilters").addEventListener("click", () => {
-    document.querySelector("#recordSearch").value = ""; document.querySelector("#recordMonth").value = ""; document.querySelector("#recordMode").value = "all"; renderRecords();
+    clearRecordFilters(); renderRecords();
   });
   document.querySelectorAll("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
   document.querySelector("#confirmImport").addEventListener("click", confirmImport);
