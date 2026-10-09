@@ -1595,6 +1595,45 @@ function renderTripStrip(visibleTrips) {
   tripStrip.querySelector(".trip-card.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
+function addRouteDirectionArrows(points, color, isActive) {
+  const arrows = L.layerGroup();
+  const refresh = () => {
+    arrows.clearLayers();
+    const projected = points.map((point) => map.latLngToLayerPoint(point));
+    const segments = projected.slice(1).map((point, index) => ({
+      from: projected[index], to: point, length: point.distanceTo(projected[index])
+    })).filter((segment) => segment.length > 0);
+    const total = segments.reduce((length, segment) => length + segment.length, 0);
+    if (total < 28) return;
+    const count = Math.min(24, Math.max(1, Math.floor(total / 110)));
+    for (let index = 0; index < count; index++) {
+      let distance = total * (index + 0.5) / count;
+      let segment = segments[segments.length - 1];
+      for (const candidate of segments) {
+        segment = candidate;
+        if (distance <= candidate.length) break;
+        distance -= candidate.length;
+      }
+      const dx = (segment.to.x - segment.from.x) / segment.length;
+      const dy = (segment.to.y - segment.from.y) / segment.length;
+      const center = L.point(segment.from.x + dx * distance, segment.from.y + dy * distance);
+      const size = isActive ? 8 : 6;
+      const shape = [
+        L.point(center.x - dx * size - dy * size * 0.65, center.y - dy * size + dx * size * 0.65),
+        L.point(center.x + dx * size * 0.45, center.y + dy * size * 0.45),
+        L.point(center.x - dx * size + dy * size * 0.65, center.y - dy * size - dx * size * 0.65)
+      ].map((point) => map.layerPointToLatLng(point));
+      L.polyline(shape, { color: '#ffffff', weight: isActive ? 6 : 5,
+        opacity: isActive ? 0.95 : 0.65, interactive: false }).addTo(arrows);
+      L.polyline(shape, { color, weight: isActive ? 3 : 2.5,
+        opacity: isActive ? 1 : 0.8, interactive: false,
+        className: 'map-route-direction' }).addTo(arrows);
+    }
+  };
+  arrows.on('add', () => { refresh(); map.on('zoomend', refresh); });
+  arrows.on('remove', () => map.off('zoomend', refresh));
+  arrows.addTo(markerLayer);
+}
 function renderMap(visibleTrips) {
   if (!map) return;
   document.querySelector('#heroCard').classList.toggle('map-overview', !focusedMapTripId);
@@ -1627,6 +1666,8 @@ function renderMap(visibleTrips) {
         interactive: false, className: "route-flow"
       }).addTo(routeLayer);
     }
+
+    addRouteDirectionArrows(points, isActive ? (modeColors[trip.mode] || "#536268") : "#69777e", isActive);
 
     route.bindTooltip(`${trip.title} ${trip.origin} -> ${trip.destination}`, {
       sticky: true
@@ -1808,12 +1849,13 @@ function showAllTripsOnMap() {
 function renderHero() {
   const trip = trips.find((item) => item.id === selectedTripId);
   if (!trip) {
+    const registrationModes = activeFilter === "all" ? ["rail", "flight"] : [activeFilter];
     heroOverlay.innerHTML = `<div class="empty-hero"><h2>${activeFilter === "all" ? "从一段旅途开始" : `暂无${modeLabel(activeFilter)}记录`}</h2>
       <p>${activeFilter === "all" ? "填入车次、航班号或路线，保存你的第一条行程。" : "切换筛选查看其他旅途，或登记新的行程。"}</p>
-      <div class="empty-actions"><button class="primary-button" data-example="rail">登记铁路</button><button class="ghost-button" data-example="flight">登记航班</button>${activeFilter !== "all" ? '<button class="ghost-button" data-show-all>查看全部</button>' : ""}</div></div>`;
+      <div class="empty-actions">${registrationModes.map((mode, index) => `<button class="${index === 0 ? "primary-button" : "ghost-button"}" data-example="${mode}">登记${mode === "flight" ? "航班" : modeLabel(mode)}</button>`).join("")}${activeFilter !== "all" ? '<button class="ghost-button" data-show-all>查看全部</button>' : ""}</div></div>`;
     heroOverlay.querySelectorAll("[data-example]").forEach((button) => button.addEventListener("click", () => {
       modeSelect.value = button.dataset.example;
-      input.placeholder = button.dataset.example === "rail" ? "如 G1234 或 上海虹桥 到 杭州东" : "如 CA1234，起降地由你填写";
+      input.placeholder = button.dataset.example === "rail" ? "如 G1234 或 上海虹桥 到 杭州东" : button.dataset.example === "flight" ? "如 CA1234，起降地由你填写" : "如 轮船 上海 到 舟山";
       input.focus();
     }));
     heroOverlay.querySelector("[data-show-all]")?.addEventListener("click", () => setFilter("all"));

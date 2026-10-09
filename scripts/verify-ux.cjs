@@ -56,6 +56,23 @@ async function main() {
       await add('G1234'); await route('上海虹桥', '杭州东'); await save();
       page.off('request', listener); assert.equal(queries, 0);
     });
+    await check('map arrows point toward arrival and survive zoom and rerender', async () => {
+      const inspect = () => page.evaluate(() => {
+        const route = routeByTripId.get(selectedTripId).getLatLngs();
+        const start = map.latLngToLayerPoint(route[0]);
+        const end = map.latLngToLayerPoint(route[route.length - 1]);
+        const arrow = document.querySelector('.map-route-direction');
+        const group = markerLayer.getLayers().find(layer => layer.getLayers && layer.getLayers().some(child => child.options.className === 'map-route-direction'));
+        const shape = group.getLayers().find(child => child.options.className === 'map-route-direction').getLatLngs().map(point => map.latLngToLayerPoint(point));
+        const rear = L.point((shape[0].x + shape[2].x) / 2, (shape[0].y + shape[2].y) / 2);
+        return { visible: Boolean(arrow), forward: (shape[1].x - rear.x) * (end.x - start.x) + (shape[1].y - rear.y) * (end.y - start.y), size: shape[1].distanceTo(rear) };
+      });
+      await page.waitForSelector('.map-route-direction');
+      const before = await inspect(); assert(before.visible); assert(before.forward > 0);
+      await page.evaluate(() => map.setZoom(map.getZoom() + 1, { animate: false }));
+      const after = await inspect(); assert(after.forward > 0); assert(Math.abs(after.size - before.size) < 2);
+      await page.evaluate(() => render()); assert((await inspect()).forward > 0);
+    });
     await check('city counts merge stations and airports and charts state the units', async () => {
       await page.click('#dashboardTab');
       const cities = page.locator('.metric-card').filter({ hasText: '到访城市' }); assert.equal(await cities.locator('strong').innerText(), '3');
