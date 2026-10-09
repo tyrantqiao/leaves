@@ -1081,6 +1081,7 @@ function setupMap() {
   }).catch(() => {});
 
   loadChinaBaseGeoJson();
+  setupBaseMapLabels();
 
   // 调试入口：URL 带 #offline 时模拟完全离线，验证本地矢量底图
   if (location.hash.includes("offline")) {
@@ -1133,6 +1134,95 @@ function loadChinaGeoJson() {
   return chinaGeoJsonPromise;
 }
 
+// 本地文字层不依赖瓦片网络；经纬度为文字排版锚点，不用于行程定位。
+function setupBaseMapLabels() {
+  const pane = map.createPane("baseLabels");
+  pane.style.zIndex = 350;
+  pane.style.pointerEvents = "none";
+  const layer = L.layerGroup().addTo(map);
+  // 名称、纬度、经度、最低缩放级别；小国在放大后出现。
+  const countries = [
+    ["中国", 35, 103, 0], ["俄罗斯", 61, 95, 0],
+    ["美国", 39, -101, 0], ["加拿大", 58, -108, 0],
+    ["巴西", -10, -53, 0], ["澳大利亚", -25, 134, 0],
+    ["印度", 22, 79, 1], ["阿根廷", -36, -64, 1],
+    ["墨西哥", 24, -102, 1], ["哈萨克斯坦", 48, 68, 1],
+    ["蒙古", 46, 104, 2], ["沙特阿拉伯", 24, 45, 2],
+    ["伊朗", 32, 54, 2], ["印度尼西亚", -3, 118, 2],
+    ["南非", -29, 25, 2], ["埃及", 27, 30, 2],
+    ["阿尔及利亚", 28, 3, 2], ["刚果民主共和国", -3, 23, 2],
+    ["日本", 37, 138, 2], ["英国", 54, -2, 3],
+    ["法国", 47, 2, 3], ["德国", 51, 10, 3],
+    ["西班牙", 40, -4, 3], ["意大利", 43, 12, 3],
+    ["挪威", 65, 13, 3], ["瑞典", 63, 17, 3],
+    ["芬兰", 65, 26, 3], ["乌克兰", 49, 32, 3],
+    ["土耳其", 39, 35, 3], ["巴基斯坦", 30, 69, 3],
+    ["泰国", 16, 101, 3], ["越南", 16, 107, 3],
+    ["菲律宾", 12, 123, 3], ["马来西亚", 4, 103, 3],
+    ["新西兰", -42, 173, 3], ["智利", -30, -71, 3],
+    ["秘鲁", -10, -75, 3], ["哥伦比亚", 4, -73, 3],
+    ["委内瑞拉", 7, -65, 3], ["玻利维亚", -17, -64, 3],
+    ["尼日利亚", 9, 8, 3], ["埃塞俄比亚", 9, 40, 3],
+    ["肯尼亚", 0, 38, 3], ["坦桑尼亚", -6, 35, 3],
+    ["苏丹", 16, 30, 3], ["利比亚", 27, 18, 3],
+    ["马达加斯加", -20, 47, 3], ["纳米比亚", -22, 17, 3],
+    ["安哥拉", -12, 18, 3], ["马里", 18, -3, 3],
+    ["尼日尔", 17, 9, 3], ["乍得", 15, 19, 3],
+    ["摩洛哥", 32, -6, 3], ["冰岛", 65, -19, 3],
+    ["韩国", 36, 128, 4], ["朝鲜", 40, 127, 4],
+    ["波兰", 52, 19, 4], ["罗马尼亚", 46, 25, 4],
+    ["希腊", 39, 23, 4], ["葡萄牙", 40, -8, 4],
+    ["爱尔兰", 53, -8, 4], ["白俄罗斯", 53, 28, 4],
+    ["阿富汗", 34, 66, 4], ["乌兹别克斯坦", 41, 64, 4],
+    ["伊拉克", 33, 44, 4], ["缅甸", 21, 96, 4],
+    ["尼泊尔", 28, 84, 4], ["孟加拉国", 24, 90, 4],
+    ["斯里兰卡", 7, 81, 4], ["柬埔寨", 13, 105, 4],
+    ["老挝", 19, 103, 4], ["巴拉圭", -23, -58, 4],
+    ["乌拉圭", -33, -56, 4], ["厄瓜多尔", -2, -78, 4],
+    ["古巴", 22, -79, 4], ["丹麦", 56, 10, 5],
+    ["荷兰", 52, 5, 5], ["比利时", 51, 4, 5],
+    ["瑞士", 47, 8, 5], ["奥地利", 48, 14, 5],
+    ["捷克", 50, 15, 5], ["匈牙利", 47, 19, 5],
+    ["新加坡", 1.35, 103.82, 6]
+  ];
+  const oceans = [
+    ["太平洋", 5, -145, 0], ["大西洋", 10, -32, 0],
+    ["印度洋", -25, 75, 0], ["北冰洋", 78, 0, 1],
+    ["南大洋", -60, 65, 1]
+  ];
+  const refresh = () => {
+    layer.clearLayers();
+    const zoom = map.getZoom();
+    // 在线细节底图已包含地名，避免放大时叠字。
+    if (tilesWorking && zoom > 3) return;
+    const size = map.getSize();
+    const centerLng = map.getCenter().lng;
+    const occupied = [];
+    const add = ([name, lat, lng, minZoom], ocean) => {
+      if (zoom < minZoom || zoom > (ocean ? 4 : 7)) return;
+      lng += 360 * Math.round((centerLng - lng) / 360);
+      const point = map.latLngToContainerPoint([lat, lng]);
+      const width = name.length * (ocean ? 13 : 12) + 16;
+      const box = { left: point.x - width / 2, right: point.x + width / 2, top: point.y - 12, bottom: point.y + 12 };
+      if (box.right < 0 || box.left > size.x || box.bottom < 0 || box.top > size.y) return;
+      if (occupied.some(other => box.left < other.right && box.right > other.left && box.top < other.bottom && box.bottom > other.top)) return;
+      occupied.push(box);
+      L.marker([lat, lng], {
+        pane: "baseLabels", interactive: false, keyboard: false,
+        icon: L.divIcon({
+          className: `base-map-label${ocean ? " base-map-label-ocean" : ""}`,
+          html: `<span>${escapeHtml(name)}</span>`,
+          iconSize: [width, 24], iconAnchor: [width / 2, 12]
+        })
+      }).addTo(layer);
+    };
+    countries.forEach(record => add(record, false));
+    oceans.forEach(record => add(record, true));
+  };
+  map.on("zoomend moveend resize baselabelrefresh", refresh);
+  refresh();
+}
+
 function offlineBaseStyle() {
   return tilesWorking
     ? { color: "#b6aa93", weight: 0.5, fill: false, opacity: 0.5 }
@@ -1143,6 +1233,7 @@ function refreshBaseLayerStyle() {
   if (baseGeoJsonLayer) {
     baseGeoJsonLayer.setStyle(offlineBaseStyle());
   }
+  map?.fire("baselabelrefresh");
 }
 
 function applyTileLayer(index) {
@@ -3074,7 +3165,7 @@ function renderTopRoutes(stats) {
     .join("");
   topRoutesList.querySelectorAll("[data-route-origin]").forEach(button => button.addEventListener("click", () => {
     clearRecordFilters(); recordRouteFilter = { origin: button.dataset.routeOrigin, destination: button.dataset.routeDestination };
-    renderRecords(); document.querySelector("#recordsDialog").showModal();
+    renderRecords(); openRecordsDialog();
   }));
 }
 function renderRecentHighlights(stats) {
@@ -3253,6 +3344,12 @@ function formatRecordDay(value) {
   const date = parseTripDate(value);
   return date ? String(date.getDate()).padStart(2, "0") : "--";
 }
+function openRecordsDialog() {
+  document.querySelector("#recordsDialog").showModal();
+  // Browse on mobile first; focus search immediately on desktop.
+  document.querySelector(window.matchMedia("(max-width: 720px)").matches ? "#recordsDialog [data-close-dialog]" : "#recordSearch").focus({ preventScroll: true });
+}
+
 function setupWorkspaceInteractions() {
   const resizeWorkspace = () => {
     document.documentElement.style.setProperty("--dialog-height", `${window.visualViewport?.height || window.innerHeight}px`);
@@ -3278,7 +3375,7 @@ function setupWorkspaceInteractions() {
   document.querySelector("#allRecords").addEventListener("click", () => {
     clearRecordFilters();
     document.querySelector("#recordMode").value = activeFilter;
-    renderRecords(); document.querySelector("#recordsDialog").showModal(); document.querySelector("#recordSearch").focus();
+    renderRecords(); openRecordsDialog();
   });
   document.querySelectorAll("#recordSearch, #recordMonth, #recordMode").forEach((field) => field.addEventListener("input", renderRecords));
   document.querySelector("#clearRecordFilters").addEventListener("click", () => {
@@ -3303,6 +3400,9 @@ function setupWorkspaceInteractions() {
   document.addEventListener("click", (event) => {
     const menu = document.querySelector("#moreMenu");
     if (!menu.contains(event.target) || event.target.closest("button:not(#logoutButton)")) menu.open = false;
+    document.querySelectorAll(".trip-more[open]").forEach((details) => {
+      if (!details.contains(event.target) || event.target.closest("button")) details.open = false;
+    });
   });
   window.addEventListener("beforeunload", () => { if (editorDialog.open) { syncEditorFields(); cacheEditor(); } });
 }

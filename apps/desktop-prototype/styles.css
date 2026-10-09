@@ -243,6 +243,25 @@ button {
   background: var(--bg);
 }
 
+.base-map-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #435b54;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 0 1px 2px #fff, 1px 0 2px #fff, -1px 0 2px #fff;
+}
+
+.base-map-label-ocean {
+  color: #557e91;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 2px;
+}
+
 .input-label {
   position: absolute;
   width: 1px;
@@ -2507,4 +2526,18 @@ button:focus-visible, summary:focus-visible, input:focus-visible, select:focus-v
   .hero-description { background: rgba(13,20,24,.8); border-radius: 8px; padding: 8px; }
   .hero-meta { gap: 4px 8px; }
   .app-notice { margin: 0 6px; padding: 4px 8px; }
+}
+
+/* Mobile browsing, touch targets and short-screen authentication. */
+@media (max-width: 720px) {
+  .auth-gate { overflow-y: auto; align-items: start; }
+  .auth-card { margin-block: auto; }
+  .auth-field input, .quick-add input, .quick-add select { font-size: 16px; }
+  .hero-overlay { padding-bottom: 26px; }
+  .hero-actions .ghost-button, .hero-actions .danger-button, .trip-more > summary { min-width: 44px; min-height: 44px; }
+  .hero-topline { padding-left: 48px; }
+  .map-caption button { min-height: 44px; padding-inline: 12px; }
+  .leaflet-touch .leaflet-bar a { width: 36px; height: 36px; line-height: 36px; }
+  .records-close { min-height: 44px; }
+  .trip-more > button { min-height: 44px; }
 }
