@@ -1595,7 +1595,7 @@ function renderTripStrip(visibleTrips) {
   tripStrip.querySelector(".trip-card.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
-function addRouteDirectionArrows(points, color, isActive) {
+function addRouteDirectionArrows(points, color, isActive, sideOffset = 0) {
   const arrows = L.layerGroup();
   const refresh = () => {
     arrows.clearLayers();
@@ -1616,7 +1616,9 @@ function addRouteDirectionArrows(points, color, isActive) {
       }
       const dx = (segment.to.x - segment.from.x) / segment.length;
       const dy = (segment.to.y - segment.from.y) / segment.length;
-      const center = L.point(segment.from.x + dx * distance, segment.from.y + dy * distance);
+      // 按行进方向向右错开，往返箭头会落在线路两侧；像素间距不随缩放变化。
+      const center = L.point(segment.from.x + dx * distance - dy * sideOffset,
+        segment.from.y + dy * distance + dx * sideOffset);
       const size = isActive ? 8 : 6;
       const shape = [
         L.point(center.x - dx * size - dy * size * 0.65, center.y - dy * size + dx * size * 0.65),
@@ -1646,9 +1648,12 @@ function renderMap(visibleTrips) {
   const focusedTripVisible = focusedMapTripId && visibleTrips.some((trip) => trip.id === focusedMapTripId);
   if (focusedMapTripId && !focusedTripVisible) focusedMapTripId = null;
   const mapTrips = focusedMapTripId ? visibleTrips.filter((trip) => trip.id === focusedMapTripId) : visibleTrips;
+  const routeEntries = mapTrips.map((trip) => ({ trip, points: getRoutePoints(trip) }));
+  const endpointKey = (point) => `${Number(point.lat).toFixed(5)},${Number(point.lng).toFixed(5)}`;
+  const directions = new Set(routeEntries.filter(({ points }) => points.length >= 2)
+    .map(({ points }) => `${endpointKey(points[0])}>${endpointKey(points[points.length - 1])}`));
 
-  mapTrips.forEach((trip) => {
-    const points = getRoutePoints(trip);
+  routeEntries.forEach(({ trip, points }) => {
     if (points.length < 2) return;
 
     const isActive = trip.id === selectedTripId;
@@ -1667,7 +1672,11 @@ function renderMap(visibleTrips) {
       }).addTo(routeLayer);
     }
 
-    addRouteDirectionArrows(points, isActive ? (modeColors[trip.mode] || "#536268") : "#69777e", isActive);
+    const fromKey = endpointKey(points[0]);
+    const toKey = endpointKey(points[points.length - 1]);
+    const hasReturnRoute = fromKey !== toKey && directions.has(`${toKey}>${fromKey}`);
+    addRouteDirectionArrows(points, isActive ? (modeColors[trip.mode] || "#536268") : "#69777e", isActive,
+      hasReturnRoute ? 11 : 0);
 
     route.bindTooltip(`${trip.title} ${trip.origin} -> ${trip.destination}`, {
       sticky: true

@@ -1,6 +1,6 @@
 # 安卓版 Leaves（本机优先）
 
-可安装正式构建 APK：`exports/android-release/Leaves-Android.apk`（0.3.9），支持安卓 8.0 及以上。使用原有签名证书，可覆盖安装 0.3.0/0.3.1，保留本地记录。
+可安装正式构建 APK：`exports/android-release/Leaves-Android.apk`（0.3.10），支持安卓 8.0 及以上。使用原有签名证书，可覆盖安装 0.3.0/0.3.1，保留本地记录。
 
 ## 应用更新
 

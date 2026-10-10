@@ -73,6 +73,44 @@ async function main() {
       const after = await inspect(); assert(after.forward > 0); assert(Math.abs(after.size - before.size) < 2);
       await page.evaluate(() => render()); assert((await inspect()).forward > 0);
     });
+    await check('return journey arrows stay on opposite sides at different zoom levels', async () => {
+      const result = await page.evaluate(() => {
+        const originalTrips = trips;
+        const originalFocus = focusedMapTripId;
+        const trip = trips.find(item => item.id === selectedTripId);
+        try {
+          trips = [trip, { ...trip, id: 'return-arrow-check', origin: trip.destination, destination: trip.origin }];
+          focusedMapTripId = null;
+          renderMap(trips);
+          const inspect = () => markerLayer.getLayers().filter(layer => layer.getLayers)
+            .map((group, tripIndex) => {
+              const arrow = group.getLayers().find(child => child.options.className === 'map-route-direction');
+              if (!arrow) return null;
+              const shape = arrow.getLatLngs().map(point => map.latLngToLayerPoint(point));
+              const rear = L.point((shape[0].x + shape[2].x) / 2, (shape[0].y + shape[2].y) / 2);
+              const routePoints = getRoutePoints(trips[tripIndex])
+                .map(point => map.latLngToLayerPoint(point));
+              const distances = routePoints.slice(1).map((end, index) => {
+                const start = routePoints[index], dx = end.x - start.x, dy = end.y - start.y;
+                const length = Math.hypot(dx, dy);
+                return length ? ((rear.y - start.y) * dx - (rear.x - start.x) * dy) / length : Infinity;
+              });
+              return Math.min(...distances.map(value => Math.abs(value - 11)));
+            }).filter(value => value !== null);
+          const before = inspect();
+          map.setZoom(map.getZoom() + 1, { animate: false });
+          return { before, after: inspect() };
+        } finally {
+          trips = originalTrips;
+          focusedMapTripId = originalFocus;
+          render();
+        }
+      });
+      for (const offsets of [result.before, result.after]) {
+        assert.equal(offsets.length, 2);
+        assert(offsets.every(error => error < 2));
+      }
+    });
     await check('city counts merge stations and airports and charts state the units', async () => {
       await page.click('#dashboardTab');
       const cities = page.locator('.metric-card').filter({ hasText: '到访城市' }); assert.equal(await cities.locator('strong').innerText(), '3');
